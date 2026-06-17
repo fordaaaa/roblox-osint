@@ -1,0 +1,88 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Roblox Social Graph</title>
+  <link rel="stylesheet" href="style.css">
+</head>
+<body>
+
+<div id="app" style="display:flex;flex-direction:column;height:100vh;">
+
+  <!-- Top bar -->
+  <nav id="topbar">
+    <h1>Roblox Graph</h1>
+
+    <form id="search-form">
+      <input
+        id="username-input"
+        type="text"
+        placeholder="Roblox username..."
+        autocomplete="off"
+        spellcheck="false"
+      >
+
+      <div id="compare-wrap">
+        <label style="font-size:0.8rem;color:var(--muted);display:flex;align-items:center;gap:4px;">
+          <input type="checkbox" id="compare-toggle"> Compare
+        </label>
+        <div id="compare-input-wrap" style="display:none;align-items:center;gap:6px;">
+          <span style="color:var(--muted);font-size:0.8rem;">vs</span>
+          <input id="username2-input" type="text" placeholder="Second username..." autocomplete="off" spellcheck="false">
+        </div>
+      </div>
+
+      <div id="controls">
+        <label>
+          Depth:
+          <select id="depth-select">
+            <option value="1">1</option>
+            <option value="2" selected>2</option>
+            <option value="3">3</option>
+          </select>
+        </label>
+        <label><input type="checkbox" id="toggle-followers" checked> Followers</label>
+        <label><input type="checkbox" id="toggle-following" checked> Following</label>
+      </div>
+
+      <button type="submit">Search</button>
+      <button type="button" id="export-btn" class="secondary">Export SVG</button>
+    </form>
+  </nav>
+
+  <!-- Main -->
+  <div id="main" style="display:flex;flex:1;overflow:hidden;">
+
+    <div id="graph-container" style="flex:1;position:relative;overflow:hidden;">
+      <div id="empty-state">
+        <p>Enter a Roblox username to explore their social graph</p>
+        <p class="hint">Click any node to expand its connections &nbsp;·&nbsp; Scroll to zoom &nbsp;·&nbsp; Drag to pan</p>
+      </div>
+    </div>
+
+    <aside id="sidebar">
+      <h3>Clusters</h3>
+      <ul id="legend-list"></ul>
+      <div id="stats"></div>
+    </aside>
+
+  </div>
+
+</div>
+
+<!-- Hover card -->
+<div id="hover-card"></div>
+
+<!-- Loading overlay -->
+<div id="loading">
+  <div class="spinner"></div>
+  <span>Fetching social graph…</span>
+</div>
+
+<!-- Error toast -->
+<div id="error-msg"></div>
+
+<script type="module" src="ui.js"></script>
+</body>
+</html>
