@@ -47,10 +47,11 @@ async def get_user(user_id: int) -> Optional[dict]:
         return None
     d = r.json()
     return _set(key, {
-        "id": d["id"],
-        "username": d["name"],
+        "id":          d["id"],
+        "username":    d["name"],
         "displayName": d["displayName"],
-        "created": d.get("created", ""),
+        "created":     d.get("created", ""),
+        "isBanned":    d.get("isBanned", False),
     })
 
 
@@ -218,6 +219,7 @@ async def get_avatars(user_ids: list) -> dict:
                 batch = {
                     item["targetId"]: item.get("imageUrl", "")
                     for item in r.json().get("data", [])
+                    if item.get("state") == "Completed" and item.get("imageUrl")
                 }
                 _set(key, batch)
                 results.update(batch)

@@ -64,18 +64,25 @@ def graph_to_json(G, seed_ids: list = None, compare_groups: dict = None,
 
     nodes = []
     for uid, data in G.nodes(data=True):
+        is_seed = uid in seed_ids
+        # Drop non-seed nodes that are banned or have no avatar —
+        # these are terminated/private accounts that add no value.
+        if not is_seed:
+            if data.get("isBanned"):
+                continue
+            if not data.get("avatarUrl"):
+                continue
         node = {
             "id":          uid,
             "username":    data.get("username",    str(uid)),
             "displayName": data.get("displayName", str(uid)),
             "avatarUrl":   data.get("avatarUrl",   ""),
             "created":     data.get("created",     ""),
-            "isSeed":      uid in seed_ids,
+            "isSeed":      is_seed,
             "community":   partition.get(uid, 0),
             "degree":      G.degree(uid),
-            # mutual = how many of seed's friends this person is also friends with
             "mutualCount": mutual_counts.get(uid, 0) if mutual_counts else None,
-            "cliqueId":    clique_map.get(uid),  # None if not in any 3+ clique
+            "cliqueId":    clique_map.get(uid),
         }
         if compare_groups:
             node["group"] = compare_groups.get(uid, "common")
@@ -130,26 +137,48 @@ async def build_inner_circle(seed_id: int) -> dict:
             G.add_node(seed_id, **seed_user, isSeed=True)
         return graph_to_json(G, seed_ids=[seed_id])
 
-    friend_ids = {f["id"] for f in friends}
+    # Validate each friend via get_user — this filters banned/deleted accounts
+    # and warms the cache so profile clicks are instant.
+    sem = asyncio.Semaphore(_CONCURRENCY)
 
-    # Build graph with seed + direct friends
+    async def validate(f):
+        async with sem:
+            user = await api.get_user(f["id"])
+        return f, user
+
+    validations = await asyncio.gather(*[validate(f) for f in friends])
+    # Only keep real, non-banned accounts
+    valid_friends = [
+        (f, user) for f, user in validations
+        if user is not None and not user.get("isBanned", False)
+    ]
+
+    if not valid_friends:
+        seed_user = await api.get_user(seed_id)
+        G = nx.Graph()
+        if seed_user:
+            G.add_node(seed_id, **seed_user, isSeed=True)
+        return graph_to_json(G, seed_ids=[seed_id])
+
+    friend_ids = {f["id"] for f, _ in valid_friends}
+
+    # Build graph with seed + validated friends
     G = nx.Graph()
     seed_user = await api.get_user(seed_id)
     if seed_user:
         G.add_node(seed_id, **seed_user, isSeed=True, depth=0)
 
-    for f in friends:
-        G.add_node(f["id"], **f, isSeed=False, depth=1)
+    for f, user_data in valid_friends:
+        # Use full user_data (includes created, isBanned) not just the friends-list stub
+        G.add_node(f["id"], **user_data, depth=1, isSeed=False)
         G.add_edge(seed_id, f["id"], type="friend")
 
     # Fetch each friend's friend list to find mutual connections
-    sem = asyncio.Semaphore(_CONCURRENCY)
-
     async def get_their_friends(fid):
         async with sem:
             return fid, await api.get_friends(fid)
 
-    results = await asyncio.gather(*[get_their_friends(f["id"]) for f in friends])
+    results = await asyncio.gather(*[get_their_friends(fid) for fid in friend_ids])
 
     # mutual_counts[fid] = how many of seed's friends fid is also friends with
     mutual_counts: dict = {}
