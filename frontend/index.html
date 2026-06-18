@@ -3,86 +3,176 @@
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <title>Roblox Social Graph</title>
+  <title>Roblox Intel</title>
   <link rel="stylesheet" href="style.css">
 </head>
 <body>
 
-<div id="app" style="display:flex;flex-direction:column;height:100vh;">
+  <!-- ══════════════════════════════════
+       VIEW: HOME
+  ══════════════════════════════════ -->
+  <div id="view-home" class="view active">
+    <nav class="home-nav">
+      <span class="logo">Roblox<span class="logo-accent">Intel</span></span>
+    </nav>
 
-  <!-- Top bar -->
-  <nav id="topbar">
-    <h1>Roblox Graph</h1>
+    <main class="home-main">
+      <div class="home-hero">
+        <div class="hero-tag">OSINT · SOCIAL MAPPING</div>
+        <h1 class="hero-title">Map any player's<br>social network</h1>
+        <p class="hero-sub">Visualise friend clusters, investigate connections,<br>and build dossiers on any public Roblox account.</p>
 
-    <form id="search-form">
-      <input
-        id="username-input"
-        type="text"
-        placeholder="Roblox username..."
-        autocomplete="off"
-        spellcheck="false"
-      >
+        <form id="home-search-form" class="hero-search">
+          <div class="search-box">
+            <svg class="search-icon" viewBox="0 0 20 20" fill="none" stroke="currentColor" stroke-width="2">
+              <circle cx="8.5" cy="8.5" r="5.5"/><path d="M15 15l-3-3"/>
+            </svg>
+            <input id="home-username" type="text" placeholder="Enter a Roblox username…" autocomplete="off" spellcheck="false">
+          </div>
+          <button type="submit" class="btn-primary">Map Network</button>
+        </form>
 
-      <div id="compare-wrap">
-        <label style="font-size:0.8rem;color:var(--muted);display:flex;align-items:center;gap:4px;">
-          <input type="checkbox" id="compare-toggle"> Compare
-        </label>
-        <div id="compare-input-wrap" style="display:none;align-items:center;gap:6px;">
-          <span style="color:var(--muted);font-size:0.8rem;">vs</span>
-          <input id="username2-input" type="text" placeholder="Second username..." autocomplete="off" spellcheck="false">
+        <div class="hero-divider"><span>or compare two players</span></div>
+
+        <form id="home-compare-form" class="compare-search">
+          <input id="compare-user1" type="text" placeholder="Username 1" autocomplete="off" spellcheck="false">
+          <span class="vs-badge">VS</span>
+          <input id="compare-user2" type="text" placeholder="Username 2" autocomplete="off" spellcheck="false">
+          <button type="submit" class="btn-secondary">Compare</button>
+        </form>
+      </div>
+
+      <div class="home-features">
+        <div class="feature-card">
+          <div class="feature-icon">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5">
+              <circle cx="12" cy="12" r="3"/><circle cx="4" cy="6" r="2"/><circle cx="20" cy="6" r="2"/>
+              <circle cx="4" cy="18" r="2"/><circle cx="20" cy="18" r="2"/>
+              <path d="M6 6l4 4M14 14l4 4M6 18l4-4M14 10l4-4"/>
+            </svg>
+          </div>
+          <h3>Friend Clusters</h3>
+          <p>Automatic community detection reveals tight-knit friend groups hidden inside any account's connections.</p>
+        </div>
+        <div class="feature-card">
+          <div class="feature-icon">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5">
+              <rect x="3" y="4" width="8" height="10" rx="1"/><circle cx="7" cy="17" r="2"/>
+              <path d="M13 7h7M13 10h5M13 13h7"/>
+            </svg>
+          </div>
+          <h3>Intel Dossiers</h3>
+          <p>Click any node for a classified-style profile — account age, groups, badges, presence, and suspicion score.</p>
+        </div>
+        <div class="feature-card">
+          <div class="feature-icon">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5">
+              <circle cx="8" cy="12" r="4"/><circle cx="16" cy="12" r="4"/>
+              <path d="M12 8v8"/>
+            </svg>
+          </div>
+          <h3>Compare Mode</h3>
+          <p>Overlay two players' social graphs. Shared connections glow gold — see exactly where two networks overlap.</p>
+        </div>
+      </div>
+    </main>
+  </div>
+
+  <!-- ══════════════════════════════════
+       VIEW: GRAPH
+  ══════════════════════════════════ -->
+  <div id="view-graph" class="view">
+
+    <!-- Top bar -->
+    <header class="graph-header">
+      <button id="back-btn" class="icon-btn" title="Back to home">
+        <svg viewBox="0 0 20 20" fill="none" stroke="currentColor" stroke-width="2">
+          <path d="M12 4L6 10l6 6"/>
+        </svg>
+      </button>
+
+      <div class="graph-subject" id="graph-subject-info">
+        <div class="subject-avatar-wrap">
+          <img id="subject-avatar" src="" alt="" style="display:none">
+          <div id="subject-avatar-placeholder" class="subject-avatar-ph"></div>
+        </div>
+        <div class="subject-text">
+          <span id="subject-name" class="subject-name">—</span>
+          <span id="subject-username" class="subject-uname"></span>
         </div>
       </div>
 
-      <div id="controls">
-        <label>
-          Depth:
-          <select id="depth-select">
-            <option value="1">1</option>
-            <option value="2" selected>2</option>
-            <option value="3">3</option>
-          </select>
+      <div class="graph-controls">
+        <div class="control-group">
+          <span class="control-label">Depth</span>
+          <div class="depth-btns">
+            <button class="depth-btn active" data-depth="1">1</button>
+            <button class="depth-btn active" data-depth="2">2</button>
+            <button class="depth-btn" data-depth="3">3</button>
+          </div>
+        </div>
+        <label class="toggle-label">
+          <input type="checkbox" id="toggle-followers" checked> <span>Followers</span>
         </label>
-        <label><input type="checkbox" id="toggle-followers" checked> Followers</label>
-        <label><input type="checkbox" id="toggle-following" checked> Following</label>
+        <label class="toggle-label">
+          <input type="checkbox" id="toggle-following" checked> <span>Following</span>
+        </label>
+        <button id="reload-btn" class="icon-btn" title="Reload graph">
+          <svg viewBox="0 0 20 20" fill="none" stroke="currentColor" stroke-width="2">
+            <path d="M4 10a6 6 0 1 1 1.5 4"/>
+            <path d="M4 14V10H8"/>
+          </svg>
+        </button>
       </div>
 
-      <button type="submit">Search</button>
-      <button type="button" id="export-btn" class="secondary">Export SVG</button>
-    </form>
-  </nav>
+      <button id="export-btn" class="btn-ghost">Export SVG</button>
+    </header>
 
-  <!-- Main -->
-  <div id="main" style="display:flex;flex:1;overflow:hidden;">
+    <!-- Canvas + sidebar -->
+    <div class="graph-body">
+      <div id="graph-canvas"></div>
 
-    <div id="graph-container" style="flex:1;position:relative;overflow:hidden;">
-      <div id="empty-state">
-        <p>Enter a Roblox username to explore their social graph</p>
-        <p class="hint">Click any node to expand its connections &nbsp;·&nbsp; Scroll to zoom &nbsp;·&nbsp; Drag to pan</p>
+      <aside id="graph-sidebar">
+        <section class="sidebar-section">
+          <div class="sidebar-heading">Clusters</div>
+          <ul id="legend-list"></ul>
+        </section>
+        <section class="sidebar-section">
+          <div class="sidebar-heading">Stats</div>
+          <div id="stats-block"></div>
+        </section>
+        <section class="sidebar-section">
+          <div class="sidebar-heading">Search graph</div>
+          <input id="node-search" type="text" placeholder="Find a player…" class="sidebar-input">
+        </section>
+      </aside>
+
+      <!-- Dossier slide-in panel -->
+      <div id="dossier-panel">
+        <div class="dossier-topbar">
+          <span class="dossier-stamp-sm">INTEL FILE</span>
+          <button id="dossier-close-btn" class="icon-btn">
+            <svg viewBox="0 0 20 20" fill="none" stroke="currentColor" stroke-width="2">
+              <path d="M5 5l10 10M15 5L5 15"/>
+            </svg>
+          </button>
+        </div>
+        <div id="dossier-body"></div>
       </div>
     </div>
-
-    <aside id="sidebar">
-      <h3>Clusters</h3>
-      <ul id="legend-list"></ul>
-      <div id="stats"></div>
-    </aside>
-
   </div>
 
-</div>
+  <!-- Global overlays -->
+  <div id="loading-overlay">
+    <div class="loading-inner">
+      <div class="loader-ring"></div>
+      <span id="loading-text">Fetching social graph…</span>
+    </div>
+  </div>
 
-<!-- Hover card -->
-<div id="hover-card"></div>
+  <div id="toast"></div>
+  <div id="hover-card"></div>
 
-<!-- Loading overlay -->
-<div id="loading">
-  <div class="spinner"></div>
-  <span>Fetching social graph…</span>
-</div>
-
-<!-- Error toast -->
-<div id="error-msg"></div>
-
-<script type="module" src="ui.js"></script>
+  <script type="module" src="ui.js"></script>
 </body>
 </html>
