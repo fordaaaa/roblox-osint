@@ -179,12 +179,21 @@ function _label(d) {
 // ── Hover card ──
 function _showHover(event, d) {
   const card = document.getElementById("hover-card");
+
+  let meta = "";
+  if (d.mutualCount != null && !d.isSeed) {
+    meta = `${d.mutualCount} mutual friend${d.mutualCount !== 1 ? "s" : ""} in group`;
+  } else if (d.degree != null) {
+    meta = `${d.degree} connection${d.degree !== 1 ? "s" : ""} in graph`;
+  }
+  if (d.created) meta += ` · joined ${new Date(d.created).getFullYear()}`;
+
   card.innerHTML = `
     <div class="hc-avatar">${d.avatarUrl ? `<img src="${d.avatarUrl}" alt="">` : ""}</div>
     <div class="hc-info">
       <div class="hc-name">${d.displayName || d.username}</div>
       <div class="hc-user">@${d.username}</div>
-      <div class="hc-meta">${d.degree} connection${d.degree !== 1 ? "s" : ""}${d.created ? ` · ${new Date(d.created).getFullYear()}` : ""}</div>
+      <div class="hc-meta">${meta}</div>
     </div>`;
   card.style.cssText = `display:flex; left:${event.pageX + 14}px; top:${event.pageY - 10}px`;
 }
@@ -214,10 +223,24 @@ export function getNodeData(id)  { return _nodeMap.get(id); }
 export function getCurrentData() { return _currentData; }
 
 export function highlightNode(username) {
-  _nodeLayer.selectAll("g.node")
-    .select("circle.ring")
-    .attr("stroke",       d => (d.username?.toLowerCase() === username.toLowerCase() || d.displayName?.toLowerCase() === username.toLowerCase()) ? "#f59e0b" : d.isSeed ? "#fff" : "none")
-    .attr("stroke-width", d => (d.username?.toLowerCase() === username.toLowerCase() || d.displayName?.toLowerCase() === username.toLowerCase()) ? 3 : 2.5);
+  const q = username.toLowerCase();
+  _nodeLayer.selectAll("g.node").select("circle.ring")
+    .attr("stroke", d => {
+      if (!q) return d.isSeed ? "#fff" : "none";
+      const match = d.username?.toLowerCase().includes(q) || d.displayName?.toLowerCase().includes(q);
+      return match ? "#f59e0b" : d.isSeed ? "#fff" : "none";
+    })
+    .attr("stroke-width", d => {
+      const match = q && (d.username?.toLowerCase().includes(q) || d.displayName?.toLowerCase().includes(q));
+      return match ? 3 : 2.5;
+    });
+}
+
+export function highlightClique(cliqueId) {
+  _nodeLayer.selectAll("g.node").select("circle.bg")
+    .attr("opacity", d => (cliqueId == null || d.cliqueId === cliqueId || d.isSeed) ? 1 : 0.25);
+  _linkLayer.selectAll("line")
+    .attr("stroke-opacity", 0.9);
 }
 
 export function updateLegend(communities, compareMode = false) {

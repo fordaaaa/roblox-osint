@@ -731,6 +731,69 @@ body {
 }
 
 /* ══════════════════════════════════════════
+   MODE TABS
+══════════════════════════════════════════ */
+.mode-tabs {
+  display: flex;
+  gap: 2px;
+  background: var(--bg);
+  border: 1px solid var(--border2);
+  border-radius: 8px;
+  padding: 3px;
+}
+
+.mode-tab {
+  background: none;
+  border: none;
+  color: var(--muted);
+  border-radius: 6px;
+  padding: 4px 11px;
+  font-size: 0.76rem;
+  font-weight: 500;
+  cursor: pointer;
+  transition: all 0.12s;
+  white-space: nowrap;
+}
+.mode-tab:hover   { color: var(--text); background: var(--bg2); }
+.mode-tab.selected { background: var(--primary); color: #fff; }
+
+/* ══════════════════════════════════════════
+   CLIQUE LIST (sidebar)
+══════════════════════════════════════════ */
+#clique-list { display: flex; flex-direction: column; gap: 8px; }
+
+.clique-item {
+  background: var(--bg);
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  padding: 8px 10px;
+  cursor: default;
+  transition: border-color 0.15s;
+}
+.clique-item:hover { border-color: var(--primary); }
+
+.clique-header {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  margin-bottom: 4px;
+}
+
+.clique-size  { font-size: 0.76rem; font-weight: 600; color: var(--text); }
+.clique-badge {
+  font-size: 0.6rem;
+  font-weight: 700;
+  letter-spacing: 0.06em;
+  color: var(--green);
+  background: rgba(16,185,129,0.1);
+  border: 1px solid rgba(16,185,129,0.25);
+  border-radius: 100px;
+  padding: 1px 7px;
+}
+
+.clique-names { font-size: 0.72rem; color: var(--muted); line-height: 1.5; }
+
+/* ══════════════════════════════════════════
    COMPARE LEGEND (inside sidebar)
 ══════════════════════════════════════════ */
 .compare-legend-item {

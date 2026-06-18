@@ -1,202 +1,262 @@
 import {
   initGraph, renderGraph, mergeGraph,
-  updateLegend, updateStats, onNodeClick,
-  highlightNode, exportSVG,
+  updateLegend, updateStats,
+  onNodeClick, highlightNode, highlightClique,
+  exportSVG,
 } from "./graph.js";
 
 import { openDossier, closeDossier, onDossierExpand } from "./profile.js";
 
-// ── State ──
-let _currentUsername = null;
+// ── State ──────────────────────────────────────────────────────────────────
+let _username    = null;
+let _mode        = "inner-circle";   // inner-circle | followers | following | explore | compare
+let _depth       = 2;
 let _compareMode = false;
-let _selectedDepth = 2;
 
-// ── Init ──
+// ── Boot ───────────────────────────────────────────────────────────────────
 document.addEventListener("DOMContentLoaded", () => {
   initGraph(document.getElementById("graph-canvas"));
 
   // Home: single search
-  document.getElementById("home-search-form").addEventListener("submit", async e => {
+  q("home-search-form").addEventListener("submit", async e => {
     e.preventDefault();
-    const u = document.getElementById("home-username").value.trim();
+    const u = q("home-username").value.trim();
     if (!u) return;
     _compareMode = false;
-    await goToGraph(u);
+    await goToGraph(u, _mode);
   });
 
-  // Home: compare search
-  document.getElementById("home-compare-form").addEventListener("submit", async e => {
+  // Home: compare
+  q("home-compare-form").addEventListener("submit", async e => {
     e.preventDefault();
-    const u1 = document.getElementById("compare-user1").value.trim();
-    const u2 = document.getElementById("compare-user2").value.trim();
+    const u1 = q("compare-user1").value.trim();
+    const u2 = q("compare-user2").value.trim();
     if (!u1 || !u2) return;
     _compareMode = true;
     await goToCompare(u1, u2);
   });
 
-  // Graph header: back
-  document.getElementById("back-btn").addEventListener("click", () => showView("home"));
+  // Graph: back
+  q("back-btn").addEventListener("click", () => showView("home"));
 
-  // Graph header: reload
-  document.getElementById("reload-btn").addEventListener("click", async () => {
-    if (_currentUsername) await loadGraph(_currentUsername);
+  // Graph: reload
+  q("reload-btn").addEventListener("click", async () => {
+    if (_username) await goToGraph(_username, _mode);
   });
 
-  // Graph header: depth buttons
-  document.querySelectorAll(".depth-btn").forEach(btn => {
-    btn.addEventListener("click", () => {
-      _selectedDepth = parseInt(btn.dataset.depth);
-      document.querySelectorAll(".depth-btn").forEach(b => b.classList.remove("selected"));
+  // Graph: mode tabs
+  document.querySelectorAll(".mode-tab").forEach(btn => {
+    btn.addEventListener("click", async () => {
+      _mode = btn.dataset.mode;
+      _compareMode = false;
+      document.querySelectorAll(".mode-tab").forEach(b => b.classList.remove("selected"));
       btn.classList.add("selected");
+      q("depth-control").style.display = _mode === "explore" ? "flex" : "none";
+      if (_username) await goToGraph(_username, _mode);
     });
   });
-  // Set default selected state
-  document.querySelector(`.depth-btn[data-depth="2"]`).classList.add("selected");
-  document.querySelectorAll(".depth-btn").forEach(b => b.classList.remove("active")); // remove leftover class from old code
 
-  // Graph header: export
-  document.getElementById("export-btn").addEventListener("click", exportSVG);
+  // Graph: depth
+  document.querySelectorAll(".depth-btn").forEach(btn => {
+    btn.addEventListener("click", () => {
+      _depth = parseInt(btn.dataset.depth);
+      document.querySelectorAll(".depth-btn").forEach(b => b.classList.remove("selected"));
+      btn.classList.add("selected");
+      if (_username && _mode === "explore") goToGraph(_username, "explore");
+    });
+  });
 
-  // Dossier: close
-  document.getElementById("dossier-close-btn").addEventListener("click", closeDossier);
+  // Graph: export
+  q("export-btn").addEventListener("click", exportSVG);
 
-  // Node click → open dossier
+  // Dossier close
+  q("dossier-close-btn").addEventListener("click", closeDossier);
+
+  // Node click → dossier
   onNodeClick(node => openDossier(node));
 
-  // Dossier expand button → load that node's connections
+  // Expand from dossier
   onDossierExpand(async profile => {
     await expandNode(profile.username);
   });
 
-  // Sidebar: search within graph
-  document.getElementById("node-search").addEventListener("input", e => {
+  // Sidebar: search
+  q("node-search").addEventListener("input", e => {
     highlightNode(e.target.value.trim());
   });
 });
 
-// ── View switching ──
+// ── Navigation ─────────────────────────────────────────────────────────────
 function showView(name) {
   document.querySelectorAll(".view").forEach(v => v.classList.remove("active"));
   document.getElementById(`view-${name}`).classList.add("active");
 }
 
-// ── Graph loading ──
-async function goToGraph(username) {
+async function goToGraph(username, mode) {
+  _username = username;
+  _mode     = mode;
   showView("graph");
-  _currentUsername = username;
-  await loadGraph(username);
+
+  switch (mode) {
+    case "inner-circle": await loadInnerCircle(username);  break;
+    case "followers":    await loadFollowGraph(username, "followers"); break;
+    case "following":    await loadFollowGraph(username, "following"); break;
+    case "explore":      await loadExplore(username);      break;
+  }
 }
 
 async function goToCompare(u1, u2) {
+  _username = u1;
+  _compareMode = true;
   showView("graph");
-  _currentUsername = u1;
   await loadCompare(u1, u2);
 }
 
-async function loadGraph(username) {
-  setLoading(true, `Mapping ${username}'s network…`);
+// ── Graph loaders ──────────────────────────────────────────────────────────
+async function loadInnerCircle(username) {
+  setLoading(true, `Mapping ${username}'s friend groups…`);
   try {
-    const params = new URLSearchParams({
-      depth:     _selectedDepth,
-      followers: document.getElementById("toggle-followers").checked,
-      following: document.getElementById("toggle-following").checked,
-    });
-
-    const res = await fetch(`/api/graph/${enc(username)}?${params}`);
-    if (!res.ok) throw new Error(await errText(res));
-    const data = await res.json();
-
+    const data = await apiFetch(`/api/inner-circle/${enc(username)}`);
     renderGraph(data);
     updateLegend(data.communities, false);
     updateStats(data.stats);
     updateSubjectHeader(username, data.nodes);
-  } catch (e) {
-    toast(e.message);
-  } finally {
-    setLoading(false);
-  }
+    renderCliqueList(data.nodes, data.communities);
+  } catch(e) { toast(e.message); }
+  finally    { setLoading(false); }
+}
+
+async function loadFollowGraph(username, mode) {
+  const label = mode === "followers" ? "followers" : "following";
+  setLoading(true, `Fetching ${username}'s ${label}…`);
+  try {
+    const data = await apiFetch(`/api/${label}/${enc(username)}`);
+    renderGraph(data);
+    updateLegend(data.communities, false);
+    updateStats(data.stats);
+    updateSubjectHeader(username, data.nodes);
+    hideCliqueList();
+  } catch(e) { toast(e.message); }
+  finally    { setLoading(false); }
+}
+
+async function loadExplore(username) {
+  setLoading(true, `Exploring ${username}'s network (depth ${_depth})…`);
+  try {
+    const data = await apiFetch(`/api/explore/${enc(username)}?depth=${_depth}`);
+    renderGraph(data);
+    updateLegend(data.communities, false);
+    updateStats(data.stats);
+    updateSubjectHeader(username, data.nodes);
+    hideCliqueList();
+  } catch(e) { toast(e.message); }
+  finally    { setLoading(false); }
 }
 
 async function loadCompare(u1, u2) {
   setLoading(true, `Comparing ${u1} vs ${u2}…`);
   try {
-    const params = new URLSearchParams({ user1: u1, user2: u2, depth: _selectedDepth });
-    const res = await fetch(`/api/compare?${params}`);
-    if (!res.ok) throw new Error(await errText(res));
-    const data = await res.json();
-
+    const data = await apiFetch(`/api/compare?user1=${enc(u1)}&user2=${enc(u2)}`);
     renderGraph(data, { compareMode: true });
     updateLegend(data.communities, true);
     updateStats(data.stats);
-
     const n1 = data.nodes.find(n => n.isSeed && n.username.toLowerCase() === u1.toLowerCase());
-    if (n1) updateSubjectHeader(`${u1} vs ${u2}`, data.nodes, n1.avatarUrl);
-  } catch (e) {
-    toast(e.message);
-  } finally {
-    setLoading(false);
-  }
+    updateSubjectHeader(`${u1} vs ${u2}`, data.nodes, n1?.avatarUrl);
+    hideCliqueList();
+  } catch(e) { toast(e.message); }
+  finally    { setLoading(false); }
 }
 
 async function expandNode(username) {
   setLoading(true, `Expanding ${username}…`);
   try {
-    const params = new URLSearchParams({
-      depth: 1,
-      followers: document.getElementById("toggle-followers").checked,
-      following: document.getElementById("toggle-following").checked,
-    });
-    const res = await fetch(`/api/graph/${enc(username)}?${params}`);
-    if (!res.ok) return;
-    const data = await res.json();
+    const data = await apiFetch(`/api/inner-circle/${enc(username)}`);
     mergeGraph(data);
     updateLegend(data.communities, _compareMode);
     updateStats(data.stats);
-  } catch (e) {
-    console.error("Expand failed:", e);
-  } finally {
-    setLoading(false);
-  }
+  } catch(e) { console.error("Expand failed:", e); }
+  finally    { setLoading(false); }
 }
 
-// ── Subject header update ──
+// ── Clique sidebar ─────────────────────────────────────────────────────────
+function renderCliqueList(nodes, communities) {
+  const section = q("clique-section");
+  const list    = q("clique-list");
+  list.innerHTML = "";
+
+  const cliqued = nodes.filter(n => n.cliqueId != null && !n.isSeed);
+  if (!cliqued.length) { section.style.display = "none"; return; }
+
+  section.style.display = "block";
+
+  // Group by cliqueId
+  const cliques = {};
+  cliqued.forEach(n => {
+    const k = n.cliqueId;
+    if (!cliques[k]) cliques[k] = [];
+    cliques[k].push(n);
+  });
+
+  Object.entries(cliques)
+    .sort((a, b) => b[1].length - a[1].length)
+    .forEach(([cid, members]) => {
+      const wrap = document.createElement("div");
+      wrap.className = "clique-item";
+      wrap.innerHTML = `
+        <div class="clique-header">
+          <span class="clique-size">${members.length} people</span>
+          <span class="clique-badge">all mutual</span>
+        </div>
+        <div class="clique-names">${members.map(m => m.displayName || m.username).slice(0, 6).join(", ")}${members.length > 6 ? "…" : ""}</div>`;
+      wrap.addEventListener("mouseenter", () => highlightClique(parseInt(cid)));
+      wrap.addEventListener("mouseleave", () => highlightClique(null));
+      list.appendChild(wrap);
+    });
+}
+
+function hideCliqueList() {
+  q("clique-section").style.display = "none";
+}
+
+// ── Subject header ─────────────────────────────────────────────────────────
 function updateSubjectHeader(username, nodes, avatarUrl) {
-  const seed = nodes?.find(n => n.isSeed);
-  const name = seed?.displayName || username;
-  const uname = seed?.username || username;
+  const seed   = nodes?.find(n => n.isSeed);
+  const name   = seed?.displayName || username;
+  const uname  = seed?.username    || username;
   const avatar = avatarUrl || seed?.avatarUrl || "";
 
-  document.getElementById("subject-name").textContent = name;
-  document.getElementById("subject-username").textContent = `@${uname}`;
+  q("subject-name").textContent    = name;
+  q("subject-username").textContent = `@${uname}`;
 
-  const img = document.getElementById("subject-avatar");
-  const ph  = document.getElementById("subject-avatar-placeholder");
+  const img = q("subject-avatar");
+  const ph  = q("subject-avatar-placeholder");
   if (avatar) {
-    img.src = avatar;
-    img.style.display = "block";
-    ph.style.display = "none";
+    img.src = avatar; img.style.display = "block"; ph.style.display = "none";
   } else {
-    img.style.display = "none";
-    ph.style.display = "block";
+    img.style.display = "none"; ph.style.display = "block";
   }
 }
 
-// ── Helpers ──
+// ── Helpers ────────────────────────────────────────────────────────────────
+function q(id) { return document.getElementById(id); }
 function enc(s) { return encodeURIComponent(s); }
 
-async function errText(res) {
-  try { const j = await res.json(); return j.detail ?? res.statusText; }
-  catch { return res.statusText; }
+async function apiFetch(url) {
+  const res = await fetch(url);
+  if (!res.ok) {
+    const j = await res.json().catch(() => ({}));
+    throw new Error(j.detail || `Error ${res.status}`);
+  }
+  return res.json();
 }
 
 function setLoading(on, msg = "") {
-  const el = document.getElementById("loading-overlay");
-  el.style.display = on ? "flex" : "none";
-  if (msg) document.getElementById("loading-text").textContent = msg;
+  q("loading-overlay").style.display = on ? "flex" : "none";
+  if (msg) q("loading-text").textContent = msg;
 }
 
 function toast(msg) {
-  const el = document.getElementById("toast");
+  const el = q("toast");
   el.textContent = msg;
   el.style.display = "block";
   clearTimeout(el._t);

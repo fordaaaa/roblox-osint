@@ -103,24 +103,23 @@
       </div>
 
       <div class="graph-controls">
-        <div class="control-group">
+        <div class="mode-tabs" id="mode-tabs">
+          <button class="mode-tab selected" data-mode="inner-circle">Friend Groups</button>
+          <button class="mode-tab" data-mode="followers">Followers</button>
+          <button class="mode-tab" data-mode="following">Following</button>
+          <button class="mode-tab" data-mode="explore">Explore</button>
+        </div>
+        <div id="depth-control" class="control-group" style="display:none">
           <span class="control-label">Depth</span>
           <div class="depth-btns">
-            <button class="depth-btn active" data-depth="1">1</button>
-            <button class="depth-btn active" data-depth="2">2</button>
+            <button class="depth-btn" data-depth="1">1</button>
+            <button class="depth-btn selected" data-depth="2">2</button>
             <button class="depth-btn" data-depth="3">3</button>
           </div>
         </div>
-        <label class="toggle-label">
-          <input type="checkbox" id="toggle-followers" checked> <span>Followers</span>
-        </label>
-        <label class="toggle-label">
-          <input type="checkbox" id="toggle-following" checked> <span>Following</span>
-        </label>
-        <button id="reload-btn" class="icon-btn" title="Reload graph">
+        <button id="reload-btn" class="icon-btn" title="Reload">
           <svg viewBox="0 0 20 20" fill="none" stroke="currentColor" stroke-width="2">
-            <path d="M4 10a6 6 0 1 1 1.5 4"/>
-            <path d="M4 14V10H8"/>
+            <path d="M4 10a6 6 0 1 1 1.5 4"/><path d="M4 14V10H8"/>
           </svg>
         </button>
       </div>
@@ -141,9 +140,13 @@
           <div class="sidebar-heading">Stats</div>
           <div id="stats-block"></div>
         </section>
+        <section class="sidebar-section" id="clique-section" style="display:none">
+          <div class="sidebar-heading">Friend Groups (cliques)</div>
+          <div id="clique-list"></div>
+        </section>
         <section class="sidebar-section">
-          <div class="sidebar-heading">Search graph</div>
-          <input id="node-search" type="text" placeholder="Find a player…" class="sidebar-input">
+          <div class="sidebar-heading">Find player</div>
+          <input id="node-search" type="text" placeholder="Search by name…" class="sidebar-input">
         </section>
       </aside>
 
