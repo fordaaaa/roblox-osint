@@ -91,11 +91,20 @@ async def compare_users(
 
 # ── Profile / Dossier ─────────────────────────────────────────────────────────
 
+@app.get("/api/profile-by-id/{user_id}")
+async def get_profile_by_id(user_id: int):
+    return await _build_profile(user_id)
+
+
 @app.get("/api/profile/{username}")
 async def get_profile(username: str):
     uid = await api.resolve_username(username)
     if uid is None:
         raise HTTPException(404, f"User '{username}' not found")
+    return await _build_profile(uid)
+
+
+async def _build_profile(uid: int):
 
     # Fetch everything concurrently; use return_exceptions so one failing
     # sub-call (e.g. badges 401) doesn't kill the whole response.
@@ -115,7 +124,7 @@ async def get_profile(username: str):
     ]
 
     if user is None:
-        raise HTTPException(404, f"User '{username}' not found")
+        raise HTTPException(404, f"User {uid} not found")
 
     counts     = counts   or {"friends": 0, "followers": 0, "following": 0}
     groups     = groups   or []

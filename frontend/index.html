@@ -61,8 +61,8 @@
               <path d="M13 7h7M13 10h5M13 13h7"/>
             </svg>
           </div>
-          <h3>Intel Dossiers</h3>
-          <p>Click any node for a classified-style profile — account age, groups, badges, presence, and suspicion score.</p>
+          <h3>Player Profiles</h3>
+          <p>Click any node for a full profile — account age, groups, badges, presence, and a risk score based on public data.</p>
         </div>
         <div class="feature-card">
           <div class="feature-icon">
@@ -150,19 +150,20 @@
         </section>
       </aside>
 
-      <!-- Dossier slide-in panel -->
-      <div id="dossier-panel">
-        <div class="dossier-topbar">
-          <span class="dossier-stamp-sm">INTEL FILE</span>
-          <button id="dossier-close-btn" class="icon-btn">
-            <svg viewBox="0 0 20 20" fill="none" stroke="currentColor" stroke-width="2">
-              <path d="M5 5l10 10M15 5L5 15"/>
-            </svg>
-          </button>
-        </div>
-        <div id="dossier-body"></div>
-      </div>
     </div>
+  </div>
+
+  <!-- Profile panel — fixed so overflow:hidden on graph-body doesn't clip it -->
+  <div id="dossier-panel">
+    <div class="profile-panel-header">
+      <span class="profile-panel-title">Player Profile</span>
+      <button id="dossier-close-btn" class="icon-btn">
+        <svg viewBox="0 0 20 20" fill="none" stroke="currentColor" stroke-width="2">
+          <path d="M5 5l10 10M15 5L5 15"/>
+        </svg>
+      </button>
+    </div>
+    <div id="dossier-body"></div>
   </div>
 
   <!-- Global overlays -->
