@@ -5,13 +5,16 @@ import networkx as nx
 import roblox_api as api
 
 MAX_NODES    = 300
-_CONCURRENCY = 8
+_CONCURRENCY = 5
 
 
 # ── Community detection (shared) ──────────────────────────────────────────────
 
 def detect_communities(G) -> dict:
     """Louvain on the undirected friend subgraph; falls back to greedy modularity."""
+    if len(G.nodes()) == 0:
+        return {}
+
     friend_edges = [
         (u, v) for u, v, d in G.edges(data=True) if d.get("type") == "friend"
     ]
@@ -23,12 +26,18 @@ def detect_communities(G) -> dict:
         import community as community_louvain
         return community_louvain.best_partition(UG)
     except Exception:
+        pass
+
+    try:
         from networkx.algorithms.community import greedy_modularity_communities
         partition: dict = {}
         for cid, comm in enumerate(greedy_modularity_communities(UG)):
             for node in comm:
                 partition[node] = cid
         return partition
+    except Exception:
+        # Last resort: every node is its own community
+        return {uid: i for i, uid in enumerate(G.nodes())}
 
 
 def _find_cliques(G, seed_ids: list) -> dict:
@@ -102,6 +111,8 @@ def graph_to_json(G, seed_ids: list = None, compare_groups: dict = None,
 
     communities: dict = {}
     for uid, cid in partition.items():
+        if uid not in G.nodes:
+            continue
         key = str(cid)
         communities.setdefault(key, [])
         communities[key].append(G.nodes[uid].get("displayName", str(uid)))
@@ -124,10 +135,9 @@ async def build_inner_circle(seed_id: int) -> dict:
     """
     The most useful view: seed's direct friends as nodes, with edges drawn
     between friends who are ALSO friends with each other.
-
-    Node degree in this graph = "how many of your friends this person also knows"
-    → naturally clusters friend groups without needing depth-2 BFS.
     """
+    # Fetch seed first so it's cached before bulk operations hit rate limits
+    seed_user_pre = await api.get_user(seed_id)
     friends = await api.get_friends(seed_id)
     if not friends:
         # Return just the seed
@@ -146,11 +156,13 @@ async def build_inner_circle(seed_id: int) -> dict:
             user = await api.get_user(f["id"])
         return f, user
 
-    validations = await asyncio.gather(*[validate(f) for f in friends])
-    # Only keep real, non-banned accounts
+    validations = await asyncio.gather(*[validate(f) for f in friends], return_exceptions=True)
+    # Only keep real, non-banned accounts; skip anything that errored
     valid_friends = [
         (f, user) for f, user in validations
-        if user is not None and not user.get("isBanned", False)
+        if not isinstance(user, Exception)
+        and user is not None
+        and not user.get("isBanned", False)
     ]
 
     if not valid_friends:
@@ -162,9 +174,9 @@ async def build_inner_circle(seed_id: int) -> dict:
 
     friend_ids = {f["id"] for f, _ in valid_friends}
 
-    # Build graph with seed + validated friends
+    # Build graph with seed + validated friends (seed already cached above)
     G = nx.Graph()
-    seed_user = await api.get_user(seed_id)
+    seed_user = seed_user_pre or await api.get_user(seed_id)
     if seed_user:
         G.add_node(seed_id, **seed_user, isSeed=True, depth=0)
 
@@ -178,11 +190,14 @@ async def build_inner_circle(seed_id: int) -> dict:
         async with sem:
             return fid, await api.get_friends(fid)
 
-    results = await asyncio.gather(*[get_their_friends(fid) for fid in friend_ids])
+    results = await asyncio.gather(*[get_their_friends(fid) for fid in friend_ids], return_exceptions=True)
 
     # mutual_counts[fid] = how many of seed's friends fid is also friends with
     mutual_counts: dict = {}
-    for fid, their_friends in results:
+    for entry in results:
+        if isinstance(entry, Exception):
+            continue
+        fid, their_friends = entry
         their_ids = {f["id"] for f in their_friends}
         mutual = their_ids & friend_ids - {seed_id}
         mutual_counts[fid] = len(mutual)
@@ -367,4 +382,46 @@ async def compare_graphs(user1_id: int, user2_id: int) -> dict:
         for uid in G.nodes()
     }
 
-    return graph_to_json(G, seed_ids=[user1_id, user2_id], compare_groups=compare_groups)
+    result = graph_to_json(G, seed_ids=[user1_id, user2_id], compare_groups=compare_groups)
+
+    # ── Compare stats ──
+    mutual_nodes = [uid for uid in common_ids if uid not in {user1_id, user2_id}]
+    u1_only      = [uid for uid in ids1 if uid not in common_ids and uid != user1_id]
+    u2_only      = [uid for uid in ids2 if uid not in common_ids and uid != user2_id]
+
+    # Shortest path between the two users through the shared friend graph
+    connection_path = []
+    degrees = None
+    try:
+        if user1_id in G.nodes and user2_id in G.nodes:
+            path_ids = nx.shortest_path(G, source=user1_id, target=user2_id)
+            degrees  = len(path_ids) - 1
+            connection_path = [
+                {
+                    "id":          uid,
+                    "username":    G.nodes[uid].get("username", str(uid)),
+                    "displayName": G.nodes[uid].get("displayName", str(uid)),
+                    "avatarUrl":   G.nodes[uid].get("avatarUrl", ""),
+                }
+                for uid in path_ids
+                if uid in G.nodes
+            ]
+    except Exception:
+        pass
+
+    result["compareStats"] = {
+        "user1Id":       user1_id,
+        "user2Id":       user2_id,
+        "user1Name":     G.nodes[user1_id].get("displayName", "User 1") if user1_id in G else "User 1",
+        "user2Name":     G.nodes[user2_id].get("displayName", "User 2") if user2_id in G else "User 2",
+        "user1Friends":  len(friends1),
+        "user2Friends":  len(friends2),
+        "mutualCount":   len(mutual_nodes),
+        "user1Only":     len(u1_only),
+        "user2Only":     len(u2_only),
+        "friendDiff":    abs(len(friends1) - len(friends2)),
+        "connectionPath": connection_path,
+        "degreesOfSeparation": degrees,
+    }
+
+    return result

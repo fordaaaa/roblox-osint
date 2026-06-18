@@ -113,7 +113,13 @@ async function goToCompare(u1, u2) {
 }
 
 // ── Graph loaders ──────────────────────────────────────────────────────────
+function hideCompareStats() {
+  q("compare-stats-section").style.display = "none";
+  q("path-section").style.display = "none";
+}
+
 async function loadInnerCircle(username) {
+  hideCompareStats();
   setLoading(true, `Mapping ${username}'s friend groups…`);
   try {
     const data = await apiFetch(`/api/inner-circle/${enc(username)}`);
@@ -163,6 +169,7 @@ async function loadCompare(u1, u2) {
     const n1 = data.nodes.find(n => n.isSeed && n.username.toLowerCase() === u1.toLowerCase());
     updateSubjectHeader(`${u1} vs ${u2}`, data.nodes, n1?.avatarUrl);
     hideCliqueList();
+    if (data.compareStats) renderCompareStats(data.compareStats);
   } catch(e) { toast(e.message); }
   finally    { setLoading(false); }
 }
@@ -216,6 +223,71 @@ function renderCliqueList(nodes, communities) {
 
 function hideCliqueList() {
   q("clique-section").style.display = "none";
+}
+
+function renderCompareStats(cs) {
+  // Stats block
+  const statsSection = q("compare-stats-section");
+  const statsBody    = q("compare-stats-body");
+  statsSection.style.display = "block";
+
+  const diff = cs.friendDiff;
+  const more = cs.user1Friends > cs.user2Friends ? cs.user1Name : cs.user2Name;
+  const less = cs.user1Friends > cs.user2Friends ? cs.user2Name : cs.user1Name;
+
+  statsBody.innerHTML = `
+    <div class="cmp-row">
+      <span class="cmp-label">${esc(cs.user1Name)}</span>
+      <span class="cmp-val">${cs.user1Friends} friends</span>
+    </div>
+    <div class="cmp-row">
+      <span class="cmp-label">${esc(cs.user2Name)}</span>
+      <span class="cmp-val">${cs.user2Friends} friends</span>
+    </div>
+    <div class="cmp-divider"></div>
+    <div class="cmp-row">
+      <span class="cmp-label">Mutual friends</span>
+      <span class="cmp-val cmp-gold">${cs.mutualCount}</span>
+    </div>
+    <div class="cmp-row">
+      <span class="cmp-label">Only ${esc(cs.user1Name)}</span>
+      <span class="cmp-val">${cs.user1Only}</span>
+    </div>
+    <div class="cmp-row">
+      <span class="cmp-label">Only ${esc(cs.user2Name)}</span>
+      <span class="cmp-val">${cs.user2Only}</span>
+    </div>
+    ${diff > 0 ? `<div class="cmp-note">${esc(more)} has ${diff} more friend${diff !== 1 ? "s" : ""} than ${esc(less)}</div>` : ""}
+  `;
+
+  // Connection path
+  const pathSection = q("path-section");
+  const pathBody    = q("path-body");
+
+  if (cs.connectionPath?.length) {
+    pathSection.style.display = "block";
+    const deg = cs.degreesOfSeparation;
+    pathBody.innerHTML = `
+      <div class="path-degrees">${deg === 1 ? "Direct friends" : `${deg} degree${deg !== 1 ? "s" : ""} of separation`}</div>
+      <div class="path-chain">
+        ${cs.connectionPath.map((node, i) => `
+          <div class="path-node">
+            ${node.avatarUrl
+              ? `<img class="path-avatar" src="${node.avatarUrl}" alt="">`
+              : `<div class="path-avatar path-avatar-ph"></div>`}
+            <div class="path-name">${esc(node.displayName || node.username)}</div>
+          </div>
+          ${i < cs.connectionPath.length - 1 ? `<div class="path-arrow">→</div>` : ""}
+        `).join("")}
+      </div>
+    `;
+  } else {
+    pathSection.style.display = "none";
+  }
+}
+
+function esc(s) {
+  return String(s ?? "").replace(/&/g,"&amp;").replace(/</g,"&lt;").replace(/>/g,"&gt;");
 }
 
 // ── Subject header ─────────────────────────────────────────────────────────
