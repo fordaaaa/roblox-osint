@@ -8,7 +8,6 @@ from fastapi.staticfiles import StaticFiles
 import roblox_api as api
 import graph as graph_module
 
-# hi my name is jeff
 app = FastAPI(title="Roblox OSINT Graph")
 FRONTEND_DIR = os.path.join(os.path.dirname(__file__), "..", "frontend")
 
