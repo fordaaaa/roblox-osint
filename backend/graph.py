@@ -72,6 +72,7 @@ def graph_to_json(G, seed_ids: list = None, compare_groups: dict = None,
     clique_map = _find_cliques(G, seed_ids)
 
     nodes = []
+    valid_ids: set = set()
     for uid, data in G.nodes(data=True):
         is_seed = uid in seed_ids
         # Drop non-seed nodes that are banned or have no avatar —
@@ -96,11 +97,14 @@ def graph_to_json(G, seed_ids: list = None, compare_groups: dict = None,
         if compare_groups:
             node["group"] = compare_groups.get(uid, "common")
         nodes.append(node)
+        valid_ids.add(uid)
 
-    # Deduplicate bidirectional friend edges
+    # Deduplicate bidirectional friend edges; skip edges referencing filtered-out nodes
     seen_pairs: set = set()
     edges = []
     for u, v, data in G.edges(data=True):
+        if u not in valid_ids or v not in valid_ids:
+            continue
         etype = data.get("type", "friend")
         if etype == "friend":
             pair = (min(u, v), max(u, v))

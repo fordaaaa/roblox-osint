@@ -39,12 +39,19 @@ async def _get_req(url: str, **kwargs) -> Optional[httpx.Response]:
     return None
 
 async def _post_req(url: str, **kwargs) -> Optional[httpx.Response]:
-    try:
-        async with httpx.AsyncClient(timeout=12) as c:
-            r = await c.post(url, **kwargs)
-        return r if r.status_code == 200 else None
-    except Exception:
-        return None
+    for attempt in range(3):
+        try:
+            async with httpx.AsyncClient(timeout=12) as c:
+                r = await c.post(url, **kwargs)
+            if r.status_code == 429:
+                await asyncio.sleep(1.5 * (attempt + 1))
+                continue
+            return r if r.status_code == 200 else None
+        except Exception:
+            if attempt == 2:
+                return None
+            await asyncio.sleep(0.5)
+    return None
 
 
 # ── User lookups ──────────────────────────────────────────────────────────────
@@ -53,28 +60,49 @@ async def resolve_username(username: str) -> Optional[int]:
     key = f"un:{username.lower()}"
     if (v := _get(key)) is not None:
         return v
+
+    # Try POST username search first
     r = await _post_req(
         f"{USERS_BASE}/usernames/users",
         json={"usernames": [username], "excludeBannedUsers": False},
     )
-    if not r:
+    if r:
+        data = r.json().get("data", [])
+        if data:
+            return _set(key, data[0]["id"])
+        # Roblox returned 200 but empty data = genuinely not found
         return None
-    data = r.json().get("data", [])
-    return _set(key, data[0]["id"]) if data else None
+
+    # POST failed (rate-limited / network) — try GET as fallback
+    # The GET /v1/users?username= endpoint is different and may have a separate rate limit
+    r2 = await _get_req(f"{USERS_BASE}/users/search", params={"keyword": username, "limit": 3})
+    if r2:
+        for u in r2.json().get("data", []):
+            if u.get("name", "").lower() == username.lower():
+                return _set(key, u["id"])
+
+    # Both failed — likely rate limited, not a missing account
+    return -1  # sentinel: -1 = API failure, None = genuinely not found
 
 
 async def get_user(user_id: int) -> Optional[dict]:
     key = f"user:{user_id}"
     if (v := _get(key)) is not None:
         return v
+    # get_user is called a lot — _get_req already retries on 429,
+    # but give it one extra attempt with a small gap in case of burst limiting
     r = await _get_req(f"{USERS_BASE}/users/{user_id}")
+    if not r:
+        await asyncio.sleep(0.8)
+        r = await _get_req(f"{USERS_BASE}/users/{user_id}")
     if not r:
         return None
     d = r.json()
+    # Roblox returns 200 for banned users but with limited data
     return _set(key, {
         "id":          d["id"],
-        "username":    d["name"],
-        "displayName": d["displayName"],
+        "username":    d.get("name", ""),
+        "displayName": d.get("displayName", ""),
         "created":     d.get("created", ""),
         "isBanned":    d.get("isBanned", False),
     })
