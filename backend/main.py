@@ -50,18 +50,34 @@ async def inner_circle(username: str):
 async def followers_graph(username: str):
     uid = _uid_or_raise(await api.resolve_username(username), username)
     try:
-        return await graph_module.build_follow_graph(uid, mode="followers")
+        data = await graph_module.build_follow_graph(uid, mode="followers")
     except Exception as e:
         raise HTTPException(500, f"Failed: {e}")
+    _require_auth_if_empty(data)
+    return data
 
 
 @app.get("/api/following/{username}")
 async def following_graph(username: str):
     uid = _uid_or_raise(await api.resolve_username(username), username)
     try:
-        return await graph_module.build_follow_graph(uid, mode="following")
+        data = await graph_module.build_follow_graph(uid, mode="following")
     except Exception as e:
         raise HTTPException(500, f"Failed: {e}")
+    _require_auth_if_empty(data)
+    return data
+
+
+def _require_auth_if_empty(data):
+    # Roblox gates the followers/following lists behind a login. Without a cookie
+    # they return 401 → an empty graph; tell the user why instead of showing blank.
+    if data["stats"]["nodeCount"] <= 1 and not api.has_auth():
+        raise HTTPException(
+            403,
+            "Roblox now requires login to list followers/following. "
+            "Set the ROBLOX_COOKIE environment variable to your .ROBLOSECURITY "
+            "value to use these modes. (Inner Circle and Compare work without it.)",
+        )
 
 
 @app.get("/api/explore/{username}")

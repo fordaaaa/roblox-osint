@@ -151,23 +151,12 @@ async def build_inner_circle(seed_id: int) -> dict:
             G.add_node(seed_id, **seed_user, isSeed=True)
         return graph_to_json(G, seed_ids=[seed_id])
 
-    # Validate each friend via get_user — this filters banned/deleted accounts
-    # and warms the cache so profile clicks are instant.
+    # Validate all friends in ONE batch request (banned/deleted accounts are
+    # excluded by the endpoint). This replaces ~N individual get_user calls that
+    # used to hammer Roblox and trip its rate limiter, making nodes vanish.
     sem = asyncio.Semaphore(_CONCURRENCY)
-
-    async def validate(f):
-        async with sem:
-            user = await api.get_user(f["id"])
-        return f, user
-
-    validations = await asyncio.gather(*[validate(f) for f in friends], return_exceptions=True)
-    # Only keep real, non-banned accounts; skip anything that errored
-    valid_friends = [
-        (f, user) for f, user in validations
-        if not isinstance(user, Exception)
-        and user is not None
-        and not user.get("isBanned", False)
-    ]
+    valid_info    = await api.get_users_batch([f["id"] for f in friends], exclude_banned=True)
+    valid_friends = [f for f in friends if f["id"] in valid_info]
 
     if not valid_friends:
         seed_user = await api.get_user(seed_id)
@@ -176,7 +165,7 @@ async def build_inner_circle(seed_id: int) -> dict:
             G.add_node(seed_id, **seed_user, isSeed=True)
         return graph_to_json(G, seed_ids=[seed_id])
 
-    friend_ids = {f["id"] for f, _ in valid_friends}
+    friend_ids = {f["id"] for f in valid_friends}
 
     # Build graph with seed + validated friends (seed already cached above)
     G = nx.Graph()
@@ -184,15 +173,21 @@ async def build_inner_circle(seed_id: int) -> dict:
     if seed_user:
         G.add_node(seed_id, **seed_user, isSeed=True, depth=0)
 
-    for f, user_data in valid_friends:
-        # Use full user_data (includes created, isBanned) not just the friends-list stub
-        G.add_node(f["id"], **user_data, depth=1, isSeed=False)
+    for f in valid_friends:
+        # Names come from the validation batch (valid_info) so this is correct
+        # even if f came from an un-enriched, cached friends-of-friends fetch.
+        info = valid_info.get(f["id"], f)
+        G.add_node(f["id"], id=f["id"],
+                   username=info.get("username") or f.get("username", ""),
+                   displayName=info.get("displayName") or f.get("displayName", ""),
+                   depth=1, isSeed=False)
         G.add_edge(seed_id, f["id"], type="friend")
 
-    # Fetch each friend's friend list to find mutual connections
+    # Fetch each friend's friend list to find mutual connections.
+    # enrich=False: we only need ids here, so skip the per-friend name lookup.
     async def get_their_friends(fid):
         async with sem:
-            return fid, await api.get_friends(fid)
+            return fid, await api.get_friends(fid, enrich=False)
 
     results = await asyncio.gather(*[get_their_friends(fid) for fid in friend_ids], return_exceptions=True)
 
