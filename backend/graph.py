@@ -75,13 +75,13 @@ def graph_to_json(G, seed_ids: list = None, compare_groups: dict = None,
     valid_ids: set = set()
     for uid, data in G.nodes(data=True):
         is_seed = uid in seed_ids
-        # Drop non-seed nodes that are banned or have no avatar —
-        # these are terminated/private accounts that add no value.
-        if not is_seed:
-            if data.get("isBanned"):
-                continue
-            if not data.get("avatarUrl"):
-                continue
+        # Drop non-seed nodes that are banned — these are terminated accounts.
+        # Do NOT drop nodes that merely lack an avatar: the thumbnails endpoint
+        # is rate-limited separately and frequently returns empty/Blocked/Pending,
+        # so a single 429 there would otherwise wipe every friend from the graph.
+        # Avatar-less nodes render fine as a coloured circle on the frontend.
+        if not is_seed and data.get("isBanned"):
+            continue
         node = {
             "id":          uid,
             "username":    data.get("username",    str(uid)),
