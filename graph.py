@@ -248,26 +248,14 @@ async def build_follow_graph(seed_id: int, mode: str = "followers") -> dict:
 
 # ── Mode: Full BFS (explore) ──────────────────────────────────────────────────
 
-async def build_graph(seed_id: int, depth: int = 2,
-                      include_followers: bool = False,
-                      include_following: bool = False) -> nx.DiGraph:
+async def build_graph(seed_id: int, depth: int = 2) -> nx.DiGraph:
     G       = nx.DiGraph()
     visited: set = set()
     sem     = asyncio.Semaphore(_CONCURRENCY)
 
-    async def fetch_connections(uid):
+    async def fetch_friends(uid):
         async with sem:
-            tasks = [api.get_friends(uid)]
-            if include_followers:
-                tasks.append(api.get_followers(uid))
-            if include_following:
-                tasks.append(api.get_following(uid))
-            results = await asyncio.gather(*tasks)
-        friends   = results[0]
-        idx       = 1
-        followers = results[idx] if include_followers else []; idx += include_followers
-        following = results[idx] if include_following else []
-        return friends, followers, following
+            return await api.get_friends(uid)
 
     frontier = [seed_id]
     for level in range(depth):
@@ -277,7 +265,7 @@ async def build_graph(seed_id: int, depth: int = 2,
         profiles = await asyncio.gather(*[api.get_user(uid) for uid in frontier if uid not in visited])
         profile_map = {uid: p for uid, p in zip([u for u in frontier if u not in visited], profiles)}
 
-        conns    = await asyncio.gather(*[fetch_connections(uid) for uid in frontier if uid not in visited])
+        conns    = await asyncio.gather(*[fetch_friends(uid) for uid in frontier if uid not in visited])
         conn_map = {uid: c for uid, c in zip([u for u in frontier if u not in visited], conns)}
 
         next_frontier = []
@@ -289,8 +277,7 @@ async def build_graph(seed_id: int, depth: int = 2,
             if not user:
                 continue
             G.add_node(uid, **user, isSeed=(uid == seed_id), depth=level)
-            friends, followers, following = conn_map.get(uid, ([], [], []))
-            for f in friends:
+            for f in conn_map.get(uid, []):
                 fid = f["id"]
                 if fid not in G:
                     G.add_node(fid, **f, isSeed=False, depth=level + 1)
@@ -298,16 +285,6 @@ async def build_graph(seed_id: int, depth: int = 2,
                 G.add_edge(fid, uid, type="friend")
                 if fid not in visited and len(G.nodes) < MAX_NODES:
                     next_frontier.append(fid)
-            for f in followers:
-                fid = f["id"]
-                if fid not in G:
-                    G.add_node(fid, **f, isSeed=False, depth=level + 1)
-                G.add_edge(fid, uid, type="follows")
-            for f in following:
-                fid = f["id"]
-                if fid not in G:
-                    G.add_node(fid, **f, isSeed=False, depth=level + 1)
-                G.add_edge(uid, fid, type="follows")
         frontier = list(dict.fromkeys(next_frontier))
 
     avatars = await api.get_avatars(list(G.nodes()))

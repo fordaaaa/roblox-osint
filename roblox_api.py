@@ -126,6 +126,19 @@ async def get_users_batch(user_ids: list, exclude_banned: bool = True) -> dict:
     return out
 
 
+def _parse_user_list(data: list) -> list:
+    """Map a friends/followers/following payload to our node dicts.
+
+    Roblox salts these lists with placeholder junk — entries with id -1 and empty
+    names (terminated/hidden accounts). Drop them so they don't become blank nodes.
+    """
+    return [
+        {"id": u["id"], "username": u.get("name", ""), "displayName": u.get("displayName", "")}
+        for u in data
+        if u.get("id", -1) > 0
+    ]
+
+
 def _fill_names(users: list, names: dict) -> list:
     """Backfill empty username/displayName on a list of {id, ...} dicts."""
     for u in users:
@@ -167,11 +180,10 @@ async def get_friends(user_id: int, enrich: bool = True) -> list:
         return v
     r = await _get_req(f"{FRIENDS_BASE}/users/{user_id}/friends")
     if not r:
-        return _set(key, [])
-    users = [
-        {"id": u["id"], "username": u["name"], "displayName": u["displayName"]}
-        for u in r.json().get("data", [])
-    ]
+        # Don't cache a failed fetch — a transient 429 would otherwise make this
+        # account look empty for the full 5-min TTL even on reload. Let it retry.
+        return []
+    users = _parse_user_list(r.json().get("data", []))
     # Roblox's friends list returns empty names — backfill from the batch endpoint.
     # enrich=False skips it for bulk friends-of-friends fetches that only need ids.
     if enrich:
@@ -189,11 +201,8 @@ async def get_followers(user_id: int, limit: int = 100) -> list:
         params={"limit": min(limit, 100), "sortOrder": "Asc"},
     )
     if not r:
-        return _set(key, [])
-    users = [
-        {"id": u["id"], "username": u["name"], "displayName": u["displayName"]}
-        for u in r.json().get("data", [])
-    ]
+        return []  # don't cache a failed fetch (see get_friends)
+    users = _parse_user_list(r.json().get("data", []))
     names = await get_users_batch([u["id"] for u in users], exclude_banned=False)
     _fill_names(users, names)
     return _set(key, users)
@@ -208,11 +217,8 @@ async def get_following(user_id: int, limit: int = 100) -> list:
         params={"limit": min(limit, 100), "sortOrder": "Asc"},
     )
     if not r:
-        return _set(key, [])
-    users = [
-        {"id": u["id"], "username": u["name"], "displayName": u["displayName"]}
-        for u in r.json().get("data", [])
-    ]
+        return []  # don't cache a failed fetch (see get_friends)
+    users = _parse_user_list(r.json().get("data", []))
     names = await get_users_batch([u["id"] for u in users], exclude_banned=False)
     _fill_names(users, names)
     return _set(key, users)
@@ -229,7 +235,7 @@ async def get_avatar_full(user_id: int) -> str:
         params={"userIds": str(user_id), "size": "150x200", "format": "Png"},
     )
     if not r:
-        return _set(key, "")
+        return ""  # don't cache a failed fetch (see get_friends)
     data = r.json().get("data", [])
     return _set(key, data[0].get("imageUrl", "") if data else "")
 
@@ -240,7 +246,7 @@ async def get_groups(user_id: int) -> list:
         return v
     r = await _get_req(f"{GROUPS_BASE}/users/{user_id}/groups/roles")
     if not r:
-        return _set(key, [])
+        return []  # don't cache a failed fetch (see get_friends)
     groups = [
         {
             "id":          entry["group"]["id"],
@@ -263,7 +269,7 @@ async def get_badges(user_id: int, limit: int = 10, oldest_first: bool = True) -
         params={"limit": limit, "sortOrder": "Asc" if oldest_first else "Desc"},
     )
     if not r:
-        return _set(key, [])
+        return []  # don't cache a failed fetch (see get_friends)
     badges = [
         {"id": b["id"], "name": b["name"], "awardedDate": b.get("awardedDate", "")}
         for b in r.json().get("data", [])
@@ -280,11 +286,16 @@ async def get_counts(user_id: int) -> dict:
         _get_req(f"{FRIENDS_BASE}/users/{user_id}/followers/count"),
         _get_req(f"{FRIENDS_BASE}/users/{user_id}/followings/count"),
     )
-    return _set(key, {
+    counts = {
         "friends":   rf.json().get("count",  0) if rf   else 0,
         "followers": rfol.json().get("count", 0) if rfol else 0,
         "following": rfow.json().get("count", 0) if rfow else 0,
-    })
+    }
+    # Only cache if at least one request succeeded — otherwise a rate-limit blip
+    # would pin this profile to all-zeros for the full TTL (see get_friends).
+    if rf or rfol or rfow:
+        _set(key, counts)
+    return counts
 
 
 async def get_presence(user_id: int) -> dict:
@@ -295,7 +306,7 @@ async def get_presence(user_id: int) -> dict:
         return entry[0]
     r = await _post_req(f"{PRESENCE_BASE}/presence/users", json={"userIds": [user_id]})
     if not r:
-        return _set(key, {})
+        return {}  # don't cache a failed fetch (see get_friends)
     presences = r.json().get("userPresences", [])
     if not presences:
         return _set(key, {})
