@@ -15,6 +15,7 @@ import sys
 
 import roblox_api as api
 import graph as graph_module
+import visualize
 
 
 # ── Output helpers ─────────────────────────────────────────────────────────────
@@ -107,6 +108,8 @@ async def cmd_circle(args):
         preview = ", ".join(members[:6]) + ("…" if len(members) > 6 else "")
         print(f"    Cluster {int(cid) + 1:<2} ({len(members):>2}): {preview}")
     _pct_note_if_empty(stats["nodeCount"], args.username)
+    if args.open:
+        visualize.open_graph(data, title=f"{args.username} — friend circles")
     return 0
 
 
@@ -120,6 +123,8 @@ async def cmd_follow(args, mode: str):
     _rule(f"{args.username} — {len(people)} {mode}")
     for p in people:
         print(f"  {p['id']:>12}  {p.get('displayName') or '?':<24} @{p.get('username') or '?'}")
+    if args.open:
+        visualize.open_graph(data, title=f"{args.username} — {mode}")
     return 0
 
 
@@ -137,6 +142,8 @@ async def cmd_compare(args):
     if cs.get("degreesOfSeparation") is not None:
         chain = " → ".join(n["displayName"] or n["username"] for n in cs["connectionPath"])
         print(f"  Separation           {cs['degreesOfSeparation']} degree(s): {chain}")
+    if args.open:
+        visualize.open_graph(data, title=f"{cs['user1Name']} vs {cs['user2Name']}")
     return 0
 
 
@@ -149,6 +156,8 @@ async def cmd_explore(args):
     print(f"  {stats['nodeCount']} people · {stats['edgeCount']} connections · "
           f"{stats['clusterCount']} cluster(s)")
     _pct_note_if_empty(stats["nodeCount"], args.username, what="connections")
+    if args.open:
+        visualize.open_graph(data, title=f"{args.username} — network depth {args.depth}")
     return 0
 
 
@@ -161,24 +170,29 @@ def build_parser() -> argparse.ArgumentParser:
     )
     sub = p.add_subparsers(dest="command", required=True, metavar="<command>")
 
-    def add(name, help_):
+    def add(name, help_, visual=False):
         sp = sub.add_parser(name, help=help_)
         sp.add_argument("username")
+        if visual:
+            sp.add_argument("--open", action="store_true",
+                            help="open an interactive mind-map in your browser")
         return sp
 
     add("profile",   "full profile: age, counts, groups, badges, presence")
     add("friends",   "list a user's public friends")
-    add("circle",    "friend-group clusters (community detection)")
-    add("followers", "list followers (needs ROBLOX_COOKIE)")
-    add("following", "list who a user follows (needs ROBLOX_COOKIE)")
+    add("circle",    "friend-group clusters (community detection)", visual=True)
+    add("followers", "list followers (needs ROBLOX_COOKIE)", visual=True)
+    add("following", "list who a user follows (needs ROBLOX_COOKIE)", visual=True)
 
-    sp_exp = add("explore", "crawl the friend network N hops out")
+    sp_exp = add("explore", "crawl the friend network N hops out", visual=True)
     sp_exp.add_argument("--depth", type=int, default=2, choices=(1, 2, 3),
                         help="how many hops to crawl (default 2)")
 
     sp_cmp = sub.add_parser("compare", help="compare two users' friend graphs")
     sp_cmp.add_argument("user1")
     sp_cmp.add_argument("user2")
+    sp_cmp.add_argument("--open", action="store_true",
+                        help="open an interactive mind-map in your browser")
 
     return p
 
