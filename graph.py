@@ -40,6 +40,19 @@ def detect_communities(G) -> dict:
         return {uid: i for i, uid in enumerate(G.nodes())}
 
 
+def _find_bridges(G, top_n: int = 12) -> set:
+    """Nodes with highest betweenness centrality — they bridge communities."""
+    if len(G.nodes()) < 5:
+        return set()
+    try:
+        UG = G.to_undirected() if G.is_directed() else G
+        bc = nx.betweenness_centrality(UG, normalized=True)
+        threshold = sorted(bc.values(), reverse=True)[min(top_n - 1, len(bc) - 1)]
+        return {n for n, v in bc.items() if v >= threshold and v > 0.02}
+    except Exception:
+        return set()
+
+
 def _find_cliques(G, seed_ids: list) -> dict:
     """
     Return dict: node_id → clique_id for nodes that belong to a clique of 3+.
@@ -70,6 +83,7 @@ def graph_to_json(G, seed_ids: list = None, compare_groups: dict = None,
     seed_ids = seed_ids or []
     partition  = detect_communities(G)
     clique_map = _find_cliques(G, seed_ids)
+    bridge_set = _find_bridges(G)
 
     nodes = []
     valid_ids: set = set()
@@ -89,6 +103,7 @@ def graph_to_json(G, seed_ids: list = None, compare_groups: dict = None,
             "avatarUrl":   data.get("avatarUrl",   ""),
             "created":     data.get("created",     ""),
             "isSeed":      is_seed,
+            "isBridge":    uid in bridge_set and not is_seed,
             "community":   partition.get(uid, 0),
             "degree":      G.degree(uid),
             "mutualCount": mutual_counts.get(uid, 0) if mutual_counts else None,

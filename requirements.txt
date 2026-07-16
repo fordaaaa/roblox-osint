@@ -1,3 +1,54 @@
 httpx
 networkx
 python-louvain
+
+const TARGET_USER_ID = 12345678; 
+
+async function getFriendsList(userId) {
+    const url = `https://friends.roblox.com/v1/users/${userId}/friends?sortOrder=Asc&limit=100`;
+    
+    try {
+        const response = await fetch(url, {
+            method: 'GET',
+            headers: {
+                'Content-Type': 'application/json'
+            }
+        });
+
+        if (!response.ok) {
+            throw new Error(`API Error: ${response.status} ${response.statusText}`);
+        }
+
+        const data = await response.json();
+
+        // Check for privacy restrictions or empty lists
+        if (data.data && data.data.length > 0) {
+            let htmlOutput = `<div style="font-family: sans-serif; border: 1px solid #ccc; padding: 20px; max-width: 500px;">`;
+            htmlOutput += `<h3>Friends of User ID: ${userId}</h3><ul>`;
+            
+            data.data.forEach(friend => {
+                htmlOutput += `<li>
+                    <strong>${friend.displayName}</strong> (@${friend.name})<br>
+                    <small>ID: ${friend.id} | Online: ${friend.isOnline}</small>
+                </li>`;
+            });
+            
+            htmlOutput += `</ul></div>`;
+            
+            // Create a container to display the result on the page
+            const container = document.createElement('div');
+            container.innerHTML = htmlOutput;
+            document.body.appendChild(container);
+            console.log("Friends list rendered on page.");
+        } else {
+            console.warn("List is empty, hidden, or access is denied (UK Privacy/Blocked).");
+            alert("Could not retrieve friends. The list is likely hidden due to UK privacy settings or you are blocked.");
+        }
+
+    } catch (error) {
+        console.error("Failed to fetch friends:", error);
+        alert("Error: " + error.message);
+    }
+}
+
+getFriendsList(TARGET_USER_ID);   

@@ -12,6 +12,7 @@ for a single command.
 import argparse
 import asyncio
 import sys
+from datetime import datetime, timedelta, timezone
 
 import roblox_api as api
 import graph as graph_module
@@ -161,6 +162,74 @@ async def cmd_explore(args):
     return 0
 
 
+async def cmd_alts(args):
+    """Detect friend accounts created within suspicious time windows."""
+    uid = await _resolve(args.username)
+    friends = await api.get_friends(uid)
+    if not friends:
+        return _err(f"{args.username} has no public friends (private list or empty)")
+
+    # Fetch creation dates concurrently
+    sem = asyncio.Semaphore(5)
+    async def fetch(f):
+        async with sem:
+            return f, await api.get_user(f["id"])
+
+    results = await asyncio.gather(*[fetch(f) for f in friends])
+
+    dated = []
+    for f, user in results:
+        if user and user.get("created"):
+            try:
+                dt = datetime.fromisoformat(user["created"].replace("Z", "+00:00"))
+                dated.append({**f, "created_dt": dt, "created": user["created"]})
+            except ValueError:
+                pass
+
+    if not dated:
+        return _err("Couldn't retrieve creation dates for any friends")
+
+    dated.sort(key=lambda x: x["created_dt"])
+    window  = timedelta(days=args.window)
+    min_sz  = args.min_size
+
+    # Sliding-window grouping — walk forward from each un-used anchor
+    groups, used = [], set()
+    for i, anchor in enumerate(dated):
+        if anchor["id"] in used:
+            continue
+        group = [anchor]
+        for item in dated[i + 1:]:
+            if item["created_dt"] - anchor["created_dt"] <= window:
+                group.append(item)
+            else:
+                break
+        if len(group) >= min_sz:
+            for m in group:
+                used.add(m["id"])
+            groups.append(group)
+
+    _rule(f"{args.username} — alt/bot detection  (window={args.window}d, min={min_sz})")
+    print(f"  Checked {len(dated)} friends with known join dates")
+
+    if not groups:
+        print("  No suspicious account clusters found.\n")
+        return 0
+
+    print(f"  Found {len(groups)} suspicious cluster(s):\n")
+    for i, group in enumerate(groups, 1):
+        d0 = group[0]["created_dt"].strftime("%Y-%m-%d")
+        d1 = group[-1]["created_dt"].strftime("%Y-%m-%d")
+        span = (group[-1]["created_dt"] - group[0]["created_dt"]).days
+        print(f"  Cluster {i}  ({len(group)} accounts · {d0} → {d1} · {span}d span)")
+        for m in group:
+            print(f"    {m['id']:>12}  {m.get('displayName','?'):<24}"
+                  f"  @{m.get('username','?'):<24}  {m['created'][:10]}")
+        print()
+
+    return 0
+
+
 # ── Argument parsing ────────────────────────────────────────────────────────────
 
 def build_parser() -> argparse.ArgumentParser:
@@ -194,6 +263,14 @@ def build_parser() -> argparse.ArgumentParser:
     sp_cmp.add_argument("--open", action="store_true",
                         help="open an interactive mind-map in your browser")
 
+    sp_alt = sub.add_parser("alts",
+        help="detect friends created in suspicious time windows (alt/bot farms)")
+    sp_alt.add_argument("username")
+    sp_alt.add_argument("--window", type=int, default=30, metavar="DAYS",
+                        help="creation-date window to group accounts (default 30)")
+    sp_alt.add_argument("--min-size", type=int, default=3, metavar="N",
+                        help="minimum cluster size to report (default 3)")
+
     return p
 
 
@@ -207,6 +284,7 @@ def main(argv=None):
         "following": lambda a: cmd_follow(a, "following"),
         "compare":   cmd_compare,
         "explore":   cmd_explore,
+        "alts":      cmd_alts,
     }
     try:
         return asyncio.run(dispatch[args.command](args)) or 0

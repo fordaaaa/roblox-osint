@@ -1,0 +1,998 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>Roblox OSINT</title>
+<style>
+:root {
+  --bg:      #0d0d11;
+  --bg2:     #12121a;
+  --bg3:     #16161e;
+  --border:  #1e1e2a;
+  --text:    #e0e0e0;
+  --muted:   #888;
+  --dim:     #444;
+  --accent:  #4e79a7;
+  --danger:  #e15759;
+  --warn:    #f28e2b;
+  --ok:      #59a14f;
+  --gold:    #edc948;
+}
+*  { box-sizing: border-box; margin: 0; padding: 0; }
+body { background: var(--bg); color: var(--text); font-family: system-ui, sans-serif;
+       display: flex; height: 100vh; overflow: hidden; font-size: 13px; }
+
+/* ── sidebar ─────────────────────────────────────────────────── */
+#sidebar {
+  width: 210px; flex-shrink: 0; background: var(--bg2);
+  border-right: 1px solid var(--border); display: flex; flex-direction: column;
+}
+.logo {
+  padding: 16px; font-size: 14px; font-weight: 700; color: #fff;
+  border-bottom: 1px solid var(--border); display: flex; align-items: center; gap: 8px;
+  letter-spacing: -.2px;
+}
+.logo-pip { width: 8px; height: 8px; border-radius: 50%; background: var(--accent); flex-shrink: 0; }
+#nav { flex: 1; padding: 8px 0; overflow-y: auto; }
+.nav-section { padding: 10px 14px 3px; font-size: 10px; text-transform: uppercase;
+               letter-spacing: .08em; color: #383850; }
+.nav-btn {
+  display: flex; align-items: center; gap: 9px; width: 100%;
+  padding: 9px 14px; text-align: left; background: none;
+  border: none; border-left: 3px solid transparent;
+  color: var(--muted); cursor: pointer; transition: all .12s;
+}
+.nav-btn:hover  { background: #1a1a26; color: #ddd; }
+.nav-btn.active { background: #1a2030; color: #fff; border-left-color: var(--accent); }
+.nav-icon { font-size: 15px; line-height: 1; width: 18px; text-align: center; }
+#sidebar-footer { padding: 12px 14px; border-top: 1px solid var(--border); font-size: 11px; color: #383850; }
+
+/* ── main ────────────────────────────────────────────────────── */
+#main { flex: 1; display: flex; flex-direction: column; overflow: hidden; min-width: 0; }
+.view { display: none; flex: 1; flex-direction: column; overflow: hidden; }
+.view.active { display: flex; }
+
+/* ── command bar ─────────────────────────────────────────────── */
+.cmd-bar {
+  padding: 14px 18px; background: var(--bg3); border-bottom: 1px solid var(--border); flex-shrink: 0;
+}
+.cmd-bar h2 { font-size: 15px; font-weight: 600; margin-bottom: 4px; }
+.cmd-desc { font-size: 12px; color: var(--muted); margin-bottom: 10px; }
+.form-row { display: flex; gap: 7px; flex-wrap: wrap; align-items: center; }
+.input {
+  padding: 7px 11px; background: var(--bg); border: 1px solid #2a2a3a;
+  border-radius: 6px; color: var(--text); font-size: 13px; outline: none;
+}
+.input:focus   { border-color: var(--accent); }
+.input::placeholder { color: #383850; }
+.input-lg      { min-width: 200px; }
+.input-sm      { width: 90px; }
+select.input   { cursor: pointer; }
+.btn-run {
+  padding: 7px 18px; border-radius: 6px; border: none;
+  background: var(--accent); color: #fff; font-size: 13px;
+  font-weight: 600; cursor: pointer; white-space: nowrap;
+}
+.btn-run:hover    { background: #5a8bbf; }
+.btn-run:disabled { opacity: .45; cursor: not-allowed; }
+.btn-sm {
+  padding: 5px 11px; border-radius: 5px; border: 1px solid var(--border);
+  background: var(--bg2); color: var(--muted); font-size: 12px; cursor: pointer;
+}
+.btn-sm:hover { background: #1e1e2e; color: var(--text); }
+
+/* ── scrollable results ──────────────────────────────────────── */
+.results { flex: 1; overflow-y: auto; padding: 18px; }
+
+/* ── states ──────────────────────────────────────────────────── */
+.empty { padding: 50px 20px; text-align: center; color: var(--dim); }
+.empty-icon { font-size: 28px; margin-bottom: 10px; }
+.loading { display: flex; align-items: center; gap: 10px; padding: 40px 20px; color: var(--muted); }
+.spinner { width: 18px; height: 18px; border: 2px solid #2a2a3a; border-top-color: var(--accent);
+           border-radius: 50%; animation: spin .65s linear infinite; flex-shrink: 0; }
+@keyframes spin { to { transform: rotate(360deg); } }
+.error-box { background: #1e1010; border: 1px solid #3a1515; border-radius: 7px;
+             padding: 12px 16px; color: var(--danger); }
+
+/* ── profile card ────────────────────────────────────────────── */
+.profile-card {
+  background: var(--bg2); border: 1px solid var(--border); border-radius: 10px;
+  padding: 18px; max-width: 520px; display: flex; gap: 16px; align-items: flex-start;
+}
+.profile-avatar { width: 72px; height: 72px; border-radius: 50%; background: var(--bg3);
+                  flex-shrink: 0; object-fit: cover; }
+.profile-right { flex: 1; min-width: 0; }
+.profile-name  { font-size: 20px; font-weight: 700; line-height: 1.2; }
+.profile-un    { color: var(--muted); margin-bottom: 10px; font-size: 12px; }
+.profile-grid  { display: grid; grid-template-columns: 1fr 1fr; gap: 4px 16px; }
+.profile-row   { font-size: 12px; color: var(--muted); }
+.profile-row strong { color: var(--text); }
+.tag { display: inline-block; padding: 1px 7px; border-radius: 3px; font-size: 11px; font-weight: 600; margin-right: 4px; }
+.tag-banned   { background: #3a1010; color: var(--danger); }
+.tag-online   { background: #1a3a1a; color: var(--ok); }
+.tag-ingame   { background: #1a2a3a; color: #7ec0e8; }
+
+.section-label { font-size: 11px; text-transform: uppercase; letter-spacing: .07em;
+                 color: var(--dim); margin: 18px 0 8px; }
+.groups-list { list-style: none; max-width: 520px; }
+.groups-list li {
+  display: flex; justify-content: space-between; padding: 6px 0;
+  border-bottom: 1px solid var(--border); font-size: 12px;
+}
+.groups-list li:last-child { border: none; }
+.group-rank { color: var(--dim); font-size: 11px; }
+.badges-row { display: flex; flex-wrap: wrap; gap: 6px; }
+.badge-chip { background: var(--bg2); border: 1px solid var(--border); border-radius: 4px;
+              padding: 3px 8px; font-size: 11px; color: var(--muted); }
+
+/* ── friends table ───────────────────────────────────────────── */
+.friends-toolbar { display: flex; gap: 8px; margin-bottom: 12px; align-items: center; }
+.friends-count   { color: var(--muted); font-size: 12px; }
+table { width: 100%; border-collapse: collapse; font-size: 12px; max-width: 640px; }
+thead th { text-align: left; padding: 6px 10px; border-bottom: 1px solid var(--border);
+           color: var(--dim); font-weight: 500; font-size: 11px; text-transform: uppercase;
+           letter-spacing: .05em; cursor: pointer; white-space: nowrap; }
+thead th:hover { color: var(--text); }
+thead th .sort-arrow { margin-left: 3px; color: var(--accent); }
+tbody td { padding: 7px 10px; border-bottom: 1px solid #0f0f17; }
+tbody tr:hover td { background: #14141e; }
+.user-id { color: #383850; font-family: monospace; font-size: 11px; }
+.display-name { font-weight: 600; }
+.username { color: var(--muted); }
+
+/* ── alt clusters ────────────────────────────────────────────── */
+.alts-summary { font-size: 12px; color: var(--muted); margin-bottom: 14px; }
+.alts-summary strong { color: var(--text); }
+.alt-cluster { background: var(--bg2); border: 1px solid var(--border); border-radius: 8px;
+               margin-bottom: 12px; overflow: hidden; }
+.alt-cluster-head {
+  display: flex; align-items: center; gap: 10px; padding: 10px 14px;
+  border-bottom: 1px solid var(--border); background: #14141e;
+}
+.alt-tag { background: #3a1515; color: var(--danger); padding: 2px 8px; border-radius: 3px;
+           font-size: 11px; font-weight: 600; }
+.alt-dates { color: var(--muted); font-size: 12px; }
+.alt-span  { color: var(--warn); font-size: 11px; margin-left: auto; }
+.alt-member {
+  display: flex; align-items: center; gap: 10px; padding: 7px 14px;
+  border-bottom: 1px solid #0f0f17; font-size: 12px;
+}
+.alt-member:last-child { border: none; }
+.alt-id   { color: #383850; font-family: monospace; font-size: 11px; width: 85px; flex-shrink: 0; }
+.alt-dn   { font-weight: 600; min-width: 130px; }
+.alt-un   { color: var(--muted); min-width: 130px; }
+.alt-date { margin-left: auto; color: var(--warn); font-size: 11px; white-space: nowrap; }
+
+/* ── compare stats ───────────────────────────────────────────── */
+.compare-stats { display: flex; gap: 10px; flex-wrap: wrap; margin-bottom: 12px; }
+.cstat { background: var(--bg2); border: 1px solid var(--border); border-radius: 7px;
+         padding: 12px 16px; text-align: center; min-width: 100px; }
+.cstat-val { font-size: 22px; font-weight: 700; color: #fff; }
+.cstat-lbl { font-size: 11px; color: var(--muted); margin-top: 2px; }
+.chain { display: flex; align-items: center; flex-wrap: wrap; gap: 6px; margin-bottom: 14px; }
+.chain-node { background: #1a2030; border-radius: 4px; padding: 4px 9px; font-size: 12px; }
+.chain-arrow { color: var(--dim); }
+
+/* ── graph view layout ───────────────────────────────────────── */
+.graph-view { flex: 1; display: flex; flex-direction: column; overflow: hidden; }
+.stats-bar {
+  display: flex; gap: 18px; padding: 8px 16px; background: var(--bg3);
+  border-bottom: 1px solid var(--border); flex-shrink: 0; align-items: center;
+  font-size: 12px; color: var(--muted);
+}
+.stats-bar strong { color: var(--text); }
+.stats-bar .hint { margin-left: auto; color: var(--dim); font-size: 11px; }
+.graph-wrap { flex: 1; position: relative; overflow: hidden; }
+
+/* Graph floating controls */
+.g-controls {
+  position: absolute; top: 10px; left: 10px; z-index: 20;
+  display: flex; flex-direction: column; gap: 6px;
+}
+.g-search {
+  padding: 6px 10px; border-radius: 6px;
+  background: rgba(13,13,17,.92); border: 1px solid #2a2a3a;
+  color: var(--text); font-size: 12px; outline: none; width: 190px;
+}
+.g-search:focus { border-color: var(--accent); }
+.g-search::placeholder { color: #383850; }
+.g-btn-row { display: flex; gap: 5px; }
+.g-btn {
+  padding: 5px 10px; border-radius: 5px;
+  background: rgba(13,13,17,.88); border: 1px solid #2a2a3a;
+  color: var(--muted); font-size: 11px; cursor: pointer; white-space: nowrap;
+}
+.g-btn:hover { color: var(--text); border-color: #444; }
+.g-btn.on { color: var(--gold); border-color: var(--gold); }
+
+/* Cluster panel */
+.cluster-panel {
+  position: absolute; top: 10px; right: 10px; z-index: 20;
+  background: rgba(13,13,17,.93); border: 1px solid #2a2a3a;
+  border-radius: 8px; width: 210px; max-height: calc(100% - 20px);
+  display: flex; flex-direction: column; overflow: hidden;
+}
+.cp-head {
+  display: flex; align-items: center; justify-content: space-between;
+  padding: 7px 10px; border-bottom: 1px solid #1e1e2a;
+  font-size: 10px; text-transform: uppercase; letter-spacing: .07em; color: var(--dim);
+}
+.cp-close { background: none; border: none; color: #444; cursor: pointer; font-size: 16px; line-height: 1; }
+.cp-close:hover { color: #ccc; }
+.cp-sort { padding: 4px 8px 4px; border-bottom: 1px solid #1e1e2a; }
+.cp-sort select { width: 100%; background: transparent; border: none; color: var(--muted);
+                  font-size: 11px; outline: none; cursor: pointer; }
+.cp-items { overflow-y: auto; flex: 1; }
+.cp-item {
+  padding: 7px 10px; cursor: pointer; border-left: 3px solid transparent;
+  transition: background .1s;
+}
+.cp-item:hover { background: #1a1a26; }
+.cp-item.on { background: #1a2030; border-left-color: var(--clr, var(--accent)); }
+.cp-item-row { display: flex; align-items: center; gap: 6px; }
+.cp-dot { width: 8px; height: 8px; border-radius: 50%; flex-shrink: 0; }
+.cp-name { font-weight: 600; font-size: 12px; color: #ddd; }
+.cp-cnt  { margin-left: auto; color: #555; font-size: 11px; }
+.cp-preview { color: #444; font-size: 11px; padding-left: 14px; margin-top: 1px;
+              white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.cp-footer { padding: 7px 10px; border-top: 1px solid #1e1e2a; }
+
+/* ── graph tooltip ───────────────────────────────────────────── */
+#gtip {
+  position: fixed; pointer-events: none; z-index: 999;
+  background: rgba(10,10,18,.97); border: 1px solid #2a2a3a; border-radius: 8px;
+  padding: 10px 13px; font-size: 12px; max-width: 210px; display: none; line-height: 1.75;
+}
+#gtip img { width: 42px; height: 42px; border-radius: 50%; display: block; margin-bottom: 7px; }
+#gtip .t-name { font-weight: 700; font-size: 13px; color: #fff; }
+.tb { display: inline-block; padding: 1px 5px; border-radius: 3px; font-size: 10px;
+      font-weight: 600; margin: 1px 2px 0 0; }
+.tb-seed   { background: #1e2840; color: #6ba3e8; }
+.tb-bridge { background: #3a3010; color: var(--gold); }
+.tb-new    { background: #3a1515; color: #c87e7e; }
+.tb-vet    { background: #153015; color: #7ec87e; }
+</style>
+</head>
+<body>
+
+<aside id="sidebar">
+  <div class="logo"><span class="logo-pip"></span>Roblox OSINT</div>
+  <nav id="nav">
+    <div class="nav-section">Lookups</div>
+    <button class="nav-btn active" data-view="profile">
+      <span class="nav-icon">👤</span>Profile
+    </button>
+    <button class="nav-btn" data-view="friends">
+      <span class="nav-icon">👥</span>Friends
+    </button>
+    <div class="nav-section">Graph</div>
+    <button class="nav-btn" data-view="circle">
+      <span class="nav-icon">⭕</span>Friend Circle
+    </button>
+    <button class="nav-btn" data-view="explore">
+      <span class="nav-icon">🔭</span>Explore Network
+    </button>
+    <button class="nav-btn" data-view="compare">
+      <span class="nav-icon">⚖️</span>Compare
+    </button>
+    <div class="nav-section">OSINT</div>
+    <button class="nav-btn" data-view="alts">
+      <span class="nav-icon">🔍</span>Alt Detection
+    </button>
+  </nav>
+  <div id="sidebar-footer">localhost:7390</div>
+</aside>
+
+<div id="main">
+
+  <!-- ── Profile ── -->
+  <div id="view-profile" class="view active">
+    <div class="cmd-bar">
+      <h2>Profile Lookup</h2>
+      <div class="cmd-desc">Account age, friends/followers/following counts, groups, badges, and presence.</div>
+      <div class="form-row">
+        <input class="input input-lg" id="profile-un" placeholder="Username" autocomplete="off">
+        <button class="btn-run" id="profile-btn" onclick="runProfile()">Search</button>
+      </div>
+    </div>
+    <div class="results" id="profile-results">
+      <div class="empty"><div class="empty-icon">👤</div>Enter a Roblox username above.</div>
+    </div>
+  </div>
+
+  <!-- ── Friends ── -->
+  <div id="view-friends" class="view">
+    <div class="cmd-bar">
+      <h2>Friends List</h2>
+      <div class="cmd-desc">All public friends for an account. Click column headers to sort.</div>
+      <div class="form-row">
+        <input class="input input-lg" id="friends-un" placeholder="Username" autocomplete="off">
+        <button class="btn-run" id="friends-btn" onclick="runFriends()">Search</button>
+      </div>
+    </div>
+    <div class="results" id="friends-results">
+      <div class="empty"><div class="empty-icon">👥</div>Enter a username to list their friends.</div>
+    </div>
+  </div>
+
+  <!-- ── Circle ── -->
+  <div id="view-circle" class="view">
+    <div class="cmd-bar">
+      <h2>Friend Circle</h2>
+      <div class="cmd-desc">Friend-group clusters using community detection. Shows mutual connections between friends.</div>
+      <div class="form-row">
+        <input class="input input-lg" id="circle-un" placeholder="Username" autocomplete="off">
+        <button class="btn-run" id="circle-btn" onclick="runCircle()">Search</button>
+      </div>
+    </div>
+    <div class="graph-view" id="circle-gv" style="display:none">
+      <div class="stats-bar" id="circle-stats"></div>
+      <div class="graph-wrap" id="circle-graph-wrap"></div>
+    </div>
+    <div class="results" id="circle-fallback">
+      <div class="empty"><div class="empty-icon">⭕</div>Enter a username to map their friend circle.</div>
+    </div>
+  </div>
+
+  <!-- ── Explore ── -->
+  <div id="view-explore" class="view">
+    <div class="cmd-bar">
+      <h2>Explore Network</h2>
+      <div class="cmd-desc">Crawl the friend network N hops out from the seed account (up to 300 nodes).</div>
+      <div class="form-row">
+        <input class="input input-lg" id="explore-un" placeholder="Username" autocomplete="off">
+        <select class="input" id="explore-depth">
+          <option value="1">Depth 1</option>
+          <option value="2" selected>Depth 2</option>
+          <option value="3">Depth 3</option>
+        </select>
+        <button class="btn-run" id="explore-btn" onclick="runExplore()">Search</button>
+      </div>
+    </div>
+    <div class="graph-view" id="explore-gv" style="display:none">
+      <div class="stats-bar" id="explore-stats"></div>
+      <div class="graph-wrap" id="explore-graph-wrap"></div>
+    </div>
+    <div class="results" id="explore-fallback">
+      <div class="empty"><div class="empty-icon">🔭</div>Enter a username to explore their network.</div>
+    </div>
+  </div>
+
+  <!-- ── Compare ── -->
+  <div id="view-compare" class="view">
+    <div class="cmd-bar">
+      <h2>Compare Two Accounts</h2>
+      <div class="cmd-desc">Mutual friends, who-only-knows-who, and degrees of separation between two users.</div>
+      <div class="form-row">
+        <input class="input input-lg" id="compare-u1" placeholder="Username 1" autocomplete="off">
+        <input class="input input-lg" id="compare-u2" placeholder="Username 2" autocomplete="off">
+        <button class="btn-run" id="compare-btn" onclick="runCompare()">Compare</button>
+      </div>
+    </div>
+    <div class="graph-view" id="compare-gv" style="display:none">
+      <div class="stats-bar" id="compare-stats"></div>
+      <div class="graph-wrap" id="compare-graph-wrap"></div>
+    </div>
+    <div class="results" id="compare-fallback">
+      <div class="empty"><div class="empty-icon">⚖️</div>Enter two usernames to compare their friend graphs.</div>
+    </div>
+  </div>
+
+  <!-- ── Alts ── -->
+  <div id="view-alts" class="view">
+    <div class="cmd-bar">
+      <h2>Alt / Bot Detection</h2>
+      <div class="cmd-desc">Find clusters of friends whose accounts were created within a suspicious time window — a common pattern for alt farms and bot rings.</div>
+      <div class="form-row">
+        <input class="input input-lg" id="alts-un" placeholder="Username" autocomplete="off">
+        <input class="input input-sm" id="alts-window" type="number" value="30" min="1" max="365" title="Window (days)"> days
+        <input class="input input-sm" id="alts-min" type="number" value="3" min="2" max="20" title="Min cluster size"> min
+        <button class="btn-run" id="alts-btn" onclick="runAlts()">Search</button>
+      </div>
+    </div>
+    <div class="results" id="alts-results">
+      <div class="empty"><div class="empty-icon">🔍</div>Enter a username to scan for suspicious account clusters.</div>
+    </div>
+  </div>
+
+</div><!-- #main -->
+
+<div id="gtip"></div>
+
+<script src="https://cdnjs.cloudflare.com/ajax/libs/d3/7.9.0/d3.min.js"></script>
+<script>
+'use strict';
+
+// ── constants ────────────────────────────────────────────────────────────────
+const COLORS = [
+  "#4e79a7","#f28e2b","#e15759","#76b7b2","#59a14f",
+  "#edc948","#b07aa1","#ff9da7","#9c755f","#bab0ac",
+];
+
+// ── navigation ────────────────────────────────────────────────────────────────
+document.querySelectorAll(".nav-btn").forEach(btn => {
+  btn.addEventListener("click", () => {
+    document.querySelectorAll(".nav-btn").forEach(b => b.classList.remove("active"));
+    document.querySelectorAll(".view").forEach(v => v.classList.remove("active"));
+    btn.classList.add("active");
+    document.getElementById(`view-${btn.dataset.view}`).classList.add("active");
+  });
+});
+
+// Enter-key submit for each form
+function enterSubmit(inputId, fn) {
+  document.getElementById(inputId).addEventListener("keydown", e => {
+    if (e.key === "Enter") fn();
+  });
+}
+enterSubmit("profile-un", runProfile);
+enterSubmit("friends-un", runFriends);
+enterSubmit("circle-un",  runCircle);
+enterSubmit("explore-un", runExplore);
+enterSubmit("compare-u1", runCompare);
+enterSubmit("compare-u2", runCompare);
+enterSubmit("alts-un",    runAlts);
+
+// ── API helper ────────────────────────────────────────────────────────────────
+async function callApi(cmd, params) {
+  const qs  = new URLSearchParams(params).toString();
+  const res = await fetch(`/api/${cmd}?${qs}`);
+  return res.json();
+}
+
+function setLoading(btnId, resultsId, msg = "Running…") {
+  const btn = document.getElementById(btnId);
+  btn.disabled = true;
+  document.getElementById(resultsId).innerHTML =
+    `<div class="loading"><div class="spinner"></div>${msg}</div>`;
+}
+
+function clearLoading(btnId) {
+  document.getElementById(btnId).disabled = false;
+}
+
+function showError(el, msg) {
+  el.innerHTML = `<div class="error-box">⚠ ${msg}</div>`;
+}
+
+// ── Profile ───────────────────────────────────────────────────────────────────
+async function runProfile() {
+  const un = document.getElementById("profile-un").value.trim();
+  if (!un) return;
+  const el = document.getElementById("profile-results");
+  setLoading("profile-btn", "profile-results", `Looking up @${un}…`);
+  try {
+    const r = await callApi("profile", { username: un });
+    clearLoading("profile-btn");
+    if (!r.ok) return showError(el, r.error);
+    renderProfile(r.data, el);
+  } catch(e) {
+    clearLoading("profile-btn");
+    showError(el, "Network error — is the server running?");
+  }
+}
+
+function renderProfile(d, el) {
+  const yrs = d.created ? ((Date.now() - new Date(d.created)) / 31557600000).toFixed(1) : "?";
+  const pType = {0:"Offline",1:"Online",2:"In-Game",3:"In Studio"};
+  const pLabel = pType[d.presence?.type ?? 0] ?? "Offline";
+  const presTag = d.presence?.label
+    ? `<span class="tag ${pLabel==="In-Game"?"tag-ingame":pLabel==="Online"?"tag-online":""}">${d.presence.label}</span>`
+    : "";
+  const bannedTag = d.isBanned ? `<span class="tag tag-banned">Banned</span>` : "";
+
+  let html = `
+    <div class="profile-card">
+      ${d.avatarUrl ? `<img class="profile-avatar" src="${d.avatarUrl}" onerror="this.style.display='none'">` : `<div class="profile-avatar"></div>`}
+      <div class="profile-right">
+        <div class="profile-name">${esc(d.displayName)}&nbsp;${bannedTag}</div>
+        <div class="profile-un">@${esc(d.username)} · ID ${d.id}&nbsp;${presTag}</div>
+        <div class="profile-grid">
+          <div class="profile-row">Joined <strong>${d.created?.slice(0,10) ?? "?"}</strong> (${yrs} yrs)</div>
+          <div class="profile-row">Friends <strong>${d.counts?.friends ?? 0}</strong></div>
+          <div class="profile-row">Followers <strong>${d.counts?.followers ?? 0}</strong></div>
+          <div class="profile-row">Following <strong>${d.counts?.following ?? 0}</strong></div>
+        </div>
+        ${d.presence?.location ? `<div class="profile-row" style="margin-top:6px">Last seen <strong>${esc(d.presence.location)}</strong></div>` : ""}
+      </div>
+    </div>`;
+
+  if (d.groups?.length) {
+    html += `<div class="section-label">Groups (${d.groups.length})</div>
+      <ul class="groups-list">
+        ${d.groups.map(g => `<li><span>${esc(g.name)}</span><span class="group-rank">${esc(g.rank)}</span></li>`).join("")}
+      </ul>`;
+  }
+  if (d.badges?.length) {
+    html += `<div class="section-label">First ${d.badges.length} badge(s) earned</div>
+      <div class="badges-row">
+        ${d.badges.map(b => `<span class="badge-chip" title="${esc(b.awardedDate?.slice(0,10) ?? "")}">${esc(b.name)}</span>`).join("")}
+      </div>`;
+  }
+  el.innerHTML = html;
+}
+
+// ── Friends ───────────────────────────────────────────────────────────────────
+let friendsData = [];
+let friendsSort = { col: "displayName", asc: true };
+
+async function runFriends() {
+  const un = document.getElementById("friends-un").value.trim();
+  if (!un) return;
+  const el = document.getElementById("friends-results");
+  setLoading("friends-btn", "friends-results", `Fetching friends of @${un}…`);
+  try {
+    const r = await callApi("friends", { username: un });
+    clearLoading("friends-btn");
+    if (!r.ok) return showError(el, r.error);
+    friendsData = r.data.friends;
+    renderFriends(el, r.data.username);
+  } catch(e) {
+    clearLoading("friends-btn");
+    showError(el, "Network error — is the server running?");
+  }
+}
+
+function renderFriends(el, username) {
+  if (!friendsData.length) {
+    el.innerHTML = `<div class="error-box">@${esc(username)} has no public friends (private list or empty).</div>`;
+    return;
+  }
+  const sorted = [...friendsData].sort((a, b) => {
+    const av = (a[friendsSort.col] || "").toString().toLowerCase();
+    const bv = (b[friendsSort.col] || "").toString().toLowerCase();
+    return friendsSort.asc ? av.localeCompare(bv) : bv.localeCompare(av);
+  });
+
+  function thClick(col) {
+    if (friendsSort.col === col) friendsSort.asc = !friendsSort.asc;
+    else { friendsSort.col = col; friendsSort.asc = true; }
+    renderFriends(el, username);
+  }
+
+  const arrow = col => friendsSort.col === col ? `<span class="sort-arrow">${friendsSort.asc ? "↑" : "↓"}</span>` : "";
+
+  el.innerHTML = `
+    <div class="friends-toolbar">
+      <span class="friends-count">${friendsData.length} friend(s) for @${esc(username)}</span>
+    </div>
+    <table>
+      <thead>
+        <tr>
+          <th onclick="friendsThClick('id')">ID${arrow("id")}</th>
+          <th onclick="friendsThClick('displayName')">Display Name${arrow("displayName")}</th>
+          <th onclick="friendsThClick('username')">Username${arrow("username")}</th>
+        </tr>
+      </thead>
+      <tbody>
+        ${sorted.map(f => `
+          <tr>
+            <td class="user-id">${f.id}</td>
+            <td class="display-name">${esc(f.displayName || "?")}</td>
+            <td class="username">@${esc(f.username || "?")}</td>
+          </tr>`).join("")}
+      </tbody>
+    </table>`;
+
+  window.friendsThClick = col => thClick(col);
+}
+
+// ── Graph views ───────────────────────────────────────────────────────────────
+async function runCircle() {
+  const un = document.getElementById("circle-un").value.trim();
+  if (!un) return;
+  showGraphLoading("circle-gv", "circle-fallback", "circle-btn", `Building friend circle for @${un}…`);
+  try {
+    const r = await callApi("circle", { username: un });
+    document.getElementById("circle-btn").disabled = false;
+    if (!r.ok) return showGraphError("circle-gv", "circle-fallback", r.error);
+    showGraphView("circle-gv", "circle-fallback");
+    renderStatsBar("circle-stats", r.data, `@${un} — friend circle`);
+    renderGraph(r.data, "circle-graph-wrap");
+  } catch(e) {
+    document.getElementById("circle-btn").disabled = false;
+    showGraphError("circle-gv", "circle-fallback", "Network error");
+  }
+}
+
+async function runExplore() {
+  const un    = document.getElementById("explore-un").value.trim();
+  const depth = document.getElementById("explore-depth").value;
+  if (!un) return;
+  showGraphLoading("explore-gv", "explore-fallback", "explore-btn", `Crawling network (depth ${depth}) for @${un}…`);
+  try {
+    const r = await callApi("explore", { username: un, depth });
+    document.getElementById("explore-btn").disabled = false;
+    if (!r.ok) return showGraphError("explore-gv", "explore-fallback", r.error);
+    showGraphView("explore-gv", "explore-fallback");
+    renderStatsBar("explore-stats", r.data, `@${un} — network depth ${depth}`);
+    renderGraph(r.data, "explore-graph-wrap");
+  } catch(e) {
+    document.getElementById("explore-btn").disabled = false;
+    showGraphError("explore-gv", "explore-fallback", "Network error");
+  }
+}
+
+async function runCompare() {
+  const u1 = document.getElementById("compare-u1").value.trim();
+  const u2 = document.getElementById("compare-u2").value.trim();
+  if (!u1 || !u2) return;
+  showGraphLoading("compare-gv", "compare-fallback", "compare-btn", `Comparing @${u1} vs @${u2}…`);
+  try {
+    const r = await callApi("compare", { user1: u1, user2: u2 });
+    document.getElementById("compare-btn").disabled = false;
+    if (!r.ok) return showGraphError("compare-gv", "compare-fallback", r.error);
+    showGraphView("compare-gv", "compare-fallback");
+    renderCompareStats("compare-stats", r.data);
+    renderGraph(r.data, "compare-graph-wrap");
+  } catch(e) {
+    document.getElementById("compare-btn").disabled = false;
+    showGraphError("compare-gv", "compare-fallback", "Network error");
+  }
+}
+
+function showGraphLoading(gvId, fbId, btnId, msg) {
+  document.getElementById(btnId).disabled = true;
+  document.getElementById(gvId).style.display = "none";
+  const fb = document.getElementById(fbId);
+  fb.style.display = "";
+  fb.innerHTML = `<div class="loading"><div class="spinner"></div>${msg}</div>`;
+}
+function showGraphView(gvId, fbId) {
+  document.getElementById(gvId).style.display = "";
+  document.getElementById(fbId).style.display = "none";
+}
+function showGraphError(gvId, fbId, msg) {
+  document.getElementById(gvId).style.display = "none";
+  const fb = document.getElementById(fbId);
+  fb.style.display = "";
+  fb.innerHTML = `<div class="results"><div class="error-box">⚠ ${esc(msg)}</div></div>`;
+}
+
+function renderStatsBar(id, data, label) {
+  const s = data.stats;
+  const bridges = data.nodes.filter(n => n.isBridge).length;
+  document.getElementById(id).innerHTML =
+    `<strong>${esc(label)}</strong>
+     <span><strong>${s.nodeCount}</strong> people</span>
+     <span><strong>${s.edgeCount}</strong> connections</span>
+     <span><strong>${s.clusterCount}</strong> clusters</span>
+     ${bridges ? `<span><strong>${bridges}</strong> bridge nodes</span>` : ""}
+     <span class="hint">Scroll to zoom · drag to pan · click node to pin</span>`;
+}
+
+function renderCompareStats(id, data) {
+  const cs = data.compareStats;
+  if (!cs) return renderStatsBar(id, data, "Compare");
+  const chainHtml = cs.connectionPath?.length
+    ? `<div class="chain">${cs.connectionPath.map(n => `<span class="chain-node">${esc(n.displayName||n.username)}</span>`).join('<span class="chain-arrow">→</span>')}</div>`
+    : "";
+  document.getElementById(id).innerHTML = `
+    <div style="display:flex;gap:10px;align-items:center;flex-wrap:wrap;padding:10px 16px">
+      <div class="compare-stats">
+        <div class="cstat"><div class="cstat-val">${cs.mutualCount}</div><div class="cstat-lbl">Mutual friends</div></div>
+        <div class="cstat"><div class="cstat-val">${cs.user1Only}</div><div class="cstat-lbl">Only ${esc(cs.user1Name)}</div></div>
+        <div class="cstat"><div class="cstat-val">${cs.user2Only}</div><div class="cstat-lbl">Only ${esc(cs.user2Name)}</div></div>
+        ${cs.degreesOfSeparation != null ? `<div class="cstat"><div class="cstat-val">${cs.degreesOfSeparation}</div><div class="cstat-lbl">Degrees apart</div></div>` : ""}
+      </div>
+      ${chainHtml}
+      <span class="hint" style="margin-left:auto;font-size:11px;color:var(--dim)">Scroll to zoom · drag to pan</span>
+    </div>`;
+}
+
+// ── Alts ──────────────────────────────────────────────────────────────────────
+async function runAlts() {
+  const un     = document.getElementById("alts-un").value.trim();
+  const window_ = document.getElementById("alts-window").value;
+  const min    = document.getElementById("alts-min").value;
+  if (!un) return;
+  const el = document.getElementById("alts-results");
+  setLoading("alts-btn", "alts-results", `Scanning friends of @${un} for alt clusters…`);
+  try {
+    const r = await callApi("alts", { username: un, window: window_, min_size: min });
+    clearLoading("alts-btn");
+    if (!r.ok) return showError(el, r.error);
+    renderAlts(r.data, el);
+  } catch(e) {
+    clearLoading("alts-btn");
+    showError(el, "Network error — is the server running?");
+  }
+}
+
+function renderAlts(d, el) {
+  let html = `<div class="alts-summary">Checked <strong>${d.checked}</strong> friends of @${esc(d.username)}. `;
+  if (!d.groups.length) {
+    html += `No suspicious clusters found.</div>`;
+  } else {
+    html += `Found <strong style="color:var(--danger)">${d.groups.length}</strong> suspicious cluster(s):</div>`;
+    d.groups.forEach((g, i) => {
+      const spanLabel = g.span_days === 0 ? "same day" : `${g.span_days}d span`;
+      html += `
+        <div class="alt-cluster">
+          <div class="alt-cluster-head">
+            <span class="alt-tag">Cluster ${i+1} · ${g.members.length} accounts</span>
+            <span class="alt-dates">${g.date_start} → ${g.date_end}</span>
+            <span class="alt-span">${spanLabel}</span>
+          </div>
+          ${g.members.map(m => `
+            <div class="alt-member">
+              <span class="alt-id">${m.id}</span>
+              <span class="alt-dn">${esc(m.displayName||"?")}</span>
+              <span class="alt-un">@${esc(m.username||"?")}</span>
+              <span class="alt-date">${m.created?.slice(0,10) ?? ""}</span>
+            </div>`).join("")}
+        </div>`;
+    });
+  }
+  el.innerHTML = html;
+}
+
+// ── D3 graph renderer ─────────────────────────────────────────────────────────
+let _simCleanup = null;
+
+function renderGraph(graphData, wrapId) {
+  // Clean up previous simulation
+  if (_simCleanup) { _simCleanup(); _simCleanup = null; }
+  const wrap = document.getElementById(wrapId);
+  wrap.innerHTML = "";
+
+  const W = wrap.clientWidth  || 800;
+  const H = wrap.clientHeight || 500;
+
+  // Floating controls
+  const controls = document.createElement("div");
+  controls.className = "g-controls";
+  controls.innerHTML = `
+    <input class="g-search" placeholder="Search user…" autocomplete="off">
+    <div class="g-btn-row">
+      <button class="g-btn" id="g-bridges-btn">Bridges only</button>
+      <button class="g-btn" id="g-reset-btn">Reset zoom</button>
+    </div>`;
+  wrap.appendChild(controls);
+
+  // Cluster panel
+  const clusterPanel = buildClusterPanel(graphData);
+  wrap.appendChild(clusterPanel);
+
+  // SVG
+  const svg = d3.select(wrap).append("svg")
+    .style("width","100%").style("height","100%");
+
+  const g = svg.append("g");
+  const zoom = d3.zoom().scaleExtent([0.03, 8])
+    .on("zoom", e => g.attr("transform", e.transform));
+  svg.call(zoom);
+
+  function resetZoom() {
+    svg.transition().duration(380).call(
+      zoom.transform,
+      d3.zoomIdentity.translate(W / 2, H / 2).scale(0.88)
+    );
+  }
+  setTimeout(resetZoom, 80);
+  controls.querySelector("#g-reset-btn").addEventListener("click", resetZoom);
+
+  // Defs (avatar patterns)
+  const defs = svg.append("defs");
+  graphData.nodes.forEach(n => {
+    if (!n.avatarUrl) return;
+    const r = nodeR(n);
+    defs.append("clipPath").attr("id", `cp-${n.id}`)
+      .append("circle").attr("r", r);
+    defs.append("pattern").attr("id", `av-${n.id}`)
+      .attr("width",1).attr("height",1)
+      .attr("patternContentUnits","objectBoundingBox")
+      .append("image")
+        .attr("href", n.avatarUrl).attr("width",1).attr("height",1)
+        .attr("preserveAspectRatio","xMidYMid slice");
+  });
+
+  // Links
+  const linkSel = g.append("g").selectAll("line")
+    .data(graphData.edges).join("line")
+    .attr("class", d => "link" + (d.type==="follows"?" follows":""))
+    .attr("stroke", "#1e1e2a").attr("stroke-width", 1.2);
+
+  // Nodes
+  const nodeSel = g.append("g").selectAll("g.node")
+    .data(graphData.nodes).join("g").attr("class","node")
+    .call(d3.drag()
+      .on("start", (ev,d) => { if(!ev.active) sim.alphaTarget(.3).restart(); d.fx=d.x; d.fy=d.y; })
+      .on("drag",  (ev,d) => { d.fx=ev.x; d.fy=ev.y; })
+      .on("end",   (ev,d) => { if(!ev.active) sim.alphaTarget(0); })
+    );
+
+  nodeSel.append("circle")
+    .attr("r",    d => nodeR(d))
+    .attr("fill", d => d.avatarUrl ? `url(#av-${d.id})` : COLORS[d.community % COLORS.length])
+    .attr("stroke", d => d.isSeed ? "#6ba3e8" : d.isBridge ? "#edc948" : COLORS[d.community % COLORS.length])
+    .attr("stroke-width", d => (d.isSeed || d.isBridge) ? 3 : 1.5)
+    .attr("stroke-dasharray", d => d.group === "user1" ? "" : d.group === "user2" ? "5 3" : "");
+
+  // Seed labels
+  nodeSel.filter(d => d.isSeed).append("text")
+    .text(d => d.displayName || d.username)
+    .attr("text-anchor","middle").attr("dy", d => nodeR(d) + 13)
+    .attr("fill","#ddd").attr("font-size",11).attr("font-weight","600")
+    .attr("pointer-events","none");
+
+  // Simulation
+  const sim = d3.forceSimulation(graphData.nodes)
+    .force("link",    d3.forceLink(graphData.edges).id(d=>d.id).distance(65).strength(.55))
+    .force("charge",  d3.forceManyBody().strength(-260))
+    .force("center",  d3.forceCenter(0, 0))
+    .force("collide", d3.forceCollide(d => nodeR(d) + 4))
+    .on("tick", () => {
+      linkSel
+        .attr("x1",d=>d.source.x).attr("y1",d=>d.source.y)
+        .attr("x2",d=>d.target.x).attr("y2",d=>d.target.y);
+      nodeSel.attr("transform",d=>`translate(${d.x},${d.y})`);
+    });
+
+  _simCleanup = () => { sim.stop(); wrap.innerHTML = ""; };
+
+  // Tooltip
+  const tip = document.getElementById("gtip");
+  nodeSel.on("mousemove", (ev, d) => {
+    const yrs = d.created ? ((Date.now()-new Date(d.created))/31557600000).toFixed(1) : null;
+    const ageBadge = yrs === null ? "" :
+      +yrs >= 5 ? `<span class="tb tb-vet">Veteran</span>` :
+      +yrs < 1  ? `<span class="tb tb-new">New account</span>` : "";
+    tip.innerHTML = [
+      d.avatarUrl ? `<img src="${d.avatarUrl}" onerror="this.style.display='none'">` : "",
+      `<div class="t-name">${esc(d.displayName||d.username)}</div>`,
+      `@${esc(d.username)}`,
+      d.isSeed   ? `<span class="tb tb-seed">Seed</span>` : "",
+      d.isBridge ? `<span class="tb tb-bridge">Bridge node</span>` : "",
+      ageBadge,
+      `<div style="margin-top:4px;color:#666;font-size:11px">`,
+      `ID: ${d.id}`,
+      d.created ? `<br>Joined: ${d.created.slice(0,10)} (${yrs} yrs)` : "",
+      `<br>Connections: ${d.degree}`,
+      d.mutualCount != null ? `<br>Mutuals: ${d.mutualCount}` : "",
+      d.group ? `<br>Role: ${d.group}` : "",
+      `<br>Cluster: ${d.community + 1}`,
+      `</div>`,
+    ].filter(Boolean).join("");
+    tip.style.display = "block";
+    tip.style.left = (ev.clientX + 15) + "px";
+    tip.style.top  = Math.max(8, ev.clientY - 10) + "px";
+  }).on("mouseleave", () => tip.style.display = "none");
+
+  // Click to pin
+  nodeSel.on("click", (ev, d) => {
+    ev.stopPropagation();
+    if (d.fx != null) { d.fx = null; d.fy = null; }
+    else              { d.fx = d.x;  d.fy = d.y; }
+  });
+  svg.on("click", () => {
+    graphData.nodes.forEach(d => { d.fx = null; d.fy = null; });
+    sim.alpha(.25).restart();
+  });
+
+  // ── highlight logic ──────────────────────────────────────────
+  let activeCid  = null;
+  let bridgesOnly = false;
+  let searchTerm  = "";
+
+  function applyHighlight() {
+    const term = searchTerm.toLowerCase();
+    nodeSel.each(function(d) {
+      const matchSearch  = !term || (d.username||"").toLowerCase().includes(term) || (d.displayName||"").toLowerCase().includes(term);
+      const matchCluster = activeCid === null || String(d.community) === String(activeCid);
+      const matchBridge  = !bridgesOnly || d.isBridge || d.isSeed;
+      const dim = !matchSearch || !matchCluster || !matchBridge;
+      d3.select(this).select("circle").attr("opacity", dim ? .08 : 1);
+      d3.select(this).select("text").attr("opacity", dim ? .05 : 1);
+    });
+    linkSel.each(function(d) {
+      const sn = typeof d.source==="object" ? d.source : graphData.nodes.find(n=>n.id===d.source);
+      const tn = typeof d.target==="object" ? d.target : graphData.nodes.find(n=>n.id===d.target);
+      const dimL = (activeCid !== null && (String(sn?.community)!==String(activeCid)||String(tn?.community)!==String(activeCid)))
+                 || (bridgesOnly && !sn?.isBridge && !tn?.isBridge);
+      d3.select(this).attr("stroke-opacity", dimL ? .04 : .7);
+    });
+  }
+
+  // Search
+  controls.querySelector(".g-search").addEventListener("input", e => {
+    searchTerm = e.target.value;
+    applyHighlight();
+  });
+
+  // Bridge toggle
+  const bridgeBtn = controls.querySelector("#g-bridges-btn");
+  bridgeBtn.addEventListener("click", () => {
+    bridgesOnly = !bridgesOnly;
+    bridgeBtn.classList.toggle("on", bridgesOnly);
+    bridgeBtn.textContent = bridgesOnly ? "Show all" : "Bridges only";
+    applyHighlight();
+  });
+
+  // Cluster panel interactions
+  clusterPanel.addEventListener("cluster-select", e => {
+    activeCid = e.detail;
+    applyHighlight();
+  });
+}
+
+function buildClusterPanel(graphData) {
+  const panel = document.createElement("div");
+  panel.className = "cluster-panel";
+  panel.innerHTML = `
+    <div class="cp-head">Clusters
+      <button class="cp-close" title="Close">×</button>
+    </div>
+    <div class="cp-sort">
+      <select id="cp-sort-sel">
+        <option value="size">Sort by size</option>
+        <option value="index">Sort by index</option>
+        <option value="oldest">Sort by oldest member</option>
+      </select>
+    </div>
+    <div class="cp-items" id="cp-items-inner"></div>
+    <div class="cp-footer">
+      <button class="btn-sm" style="width:100%" id="cp-showall">Show all</button>
+    </div>`;
+
+  panel.querySelector(".cp-close").addEventListener("click", () => panel.remove());
+
+  let activeCid = null;
+  function buildList(sortBy) {
+    const inner = panel.querySelector("#cp-items-inner");
+    inner.innerHTML = "";
+    const entries = Object.entries(graphData.communities).map(([cid, members]) => {
+      const clNodes = graphData.nodes.filter(n => String(n.community) === String(cid));
+      const oldest  = Math.min(...clNodes.map(n => n.created ? new Date(n.created).getTime() : Infinity));
+      return { cid, members, oldest };
+    });
+    if (sortBy === "size")   entries.sort((a,b) => b.members.length - a.members.length);
+    if (sortBy === "index")  entries.sort((a,b) => Number(a.cid) - Number(b.cid));
+    if (sortBy === "oldest") entries.sort((a,b) => a.oldest - b.oldest);
+
+    entries.forEach(({ cid, members }) => {
+      const color   = COLORS[Number(cid) % COLORS.length];
+      const preview = members.slice(0,3).join(", ") + (members.length>3?"…":"");
+      const item    = document.createElement("div");
+      item.className = "cp-item" + (String(cid)===String(activeCid)?" on":"");
+      item.style.setProperty("--clr", color);
+      item.innerHTML = `
+        <div class="cp-item-row">
+          <span class="cp-dot" style="background:${color}"></span>
+          <span class="cp-name">Cluster ${Number(cid)+1}</span>
+          <span class="cp-cnt">${members.length}</span>
+        </div>
+        <div class="cp-preview">${esc(preview)}</div>`;
+      item.addEventListener("click", () => {
+        const wasOn = item.classList.contains("on");
+        inner.querySelectorAll(".cp-item").forEach(i => i.classList.remove("on"));
+        if (!wasOn) { item.classList.add("on"); activeCid = cid; }
+        else { activeCid = null; }
+        panel.dispatchEvent(new CustomEvent("cluster-select", { detail: activeCid, bubbles: true }));
+      });
+      inner.appendChild(item);
+    });
+  }
+
+  panel.querySelector("#cp-sort-sel").addEventListener("change", e => buildList(e.target.value));
+  panel.querySelector("#cp-showall").addEventListener("click", () => {
+    activeCid = null;
+    buildList(panel.querySelector("#cp-sort-sel").value);
+    panel.dispatchEvent(new CustomEvent("cluster-select", { detail: null, bubbles: true }));
+  });
+
+  buildList("size");
+  return panel;
+}
+
+// ── helpers ───────────────────────────────────────────────────────────────────
+function nodeR(d) {
+  return d.isSeed ? 22 : Math.max(8, Math.min(20, 8 + Math.log1p(d.degree||0) * 3.2));
+}
+
+function esc(s) {
+  return String(s||"").replace(/&/g,"&amp;").replace(/</g,"&lt;").replace(/>/g,"&gt;").replace(/"/g,"&quot;");
+}
+</script>
+</body>
+</html>
