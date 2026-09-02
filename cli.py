@@ -11,6 +11,7 @@ for a single command.
 """
 import argparse
 import asyncio
+import json
 import sys
 from datetime import datetime, timedelta, timezone
 
@@ -64,6 +65,23 @@ async def cmd_profile(args):
     groups   = groups   if isinstance(groups, list)  else []
     badges   = badges   if isinstance(badges, list)  else []
     presence = presence if isinstance(presence, dict) else {}
+
+    if args.json:
+        print(json.dumps({
+            "userId": uid,
+            "displayName": user.get("displayName"),
+            "username": user.get("username"),
+            "created": user.get("created"),
+            "counts": {
+                "friends": counts.get("friends", 0),
+                "followers": counts.get("followers", 0),
+                "following": counts.get("following", 0),
+            },
+            "presence": presence,
+            "groups": groups,
+            "firstBadge": badges[0] if badges else None,
+        }))
+        return 0
 
     _rule(f"{user['displayName']}  (@{user['username']})")
     print(f"  User ID     : {uid}")
@@ -247,7 +265,9 @@ def build_parser() -> argparse.ArgumentParser:
                             help="open an interactive mind-map in your browser")
         return sp
 
-    add("profile",   "full profile: age, counts, groups, badges, presence")
+    sp_profile = add("profile", "full profile: age, counts, groups, badges, presence")
+    sp_profile.add_argument("--json", action="store_true",
+                            help="print the profile as a single JSON object")
     add("friends",   "list a user's public friends")
     add("circle",    "friend-group clusters (community detection)", visual=True)
     add("followers", "list followers (needs ROBLOX_COOKIE)", visual=True)
