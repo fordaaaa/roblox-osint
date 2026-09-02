@@ -30,6 +30,7 @@ python cli.py <command> <username> [options]
 | `followers <user>`     | List followers *(needs `ROBLOX_COOKIE`, see below)* |
 | `following <user>`     | List who the user follows *(needs `ROBLOX_COOKIE`)* |
 | `compare <user1> <user2>` | Mutual friends, who-only-knows-who, and degrees of separation |
+| `alts <user> [--window DAYS] [--min-size N]` | Detect friends created in suspicious time windows (possible alt/bot clusters) |
 
 ### Examples
 
@@ -39,6 +40,7 @@ python cli.py friends shedletsky
 python cli.py circle Linkmon99
 python cli.py explore shedletsky --depth 2
 python cli.py compare shedletsky Linkmon99
+python cli.py alts shedletsky --window 30 --min-size 3
 ```
 
 Run `python cli.py --help` for the command list, or
