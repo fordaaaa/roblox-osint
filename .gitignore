@@ -1,6 +1,13 @@
-# hi   
+# python
+__pycache__/
+*.pyc
+venv/
+.venv/
 
-# md files
+# os
+.DS_Store
+
+# local notes
 claude.md
 vision.md
 plan.md
